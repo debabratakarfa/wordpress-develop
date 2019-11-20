@@ -131,13 +131,10 @@ function wp_check_php_mysql_versions() {
 	$php_version = phpversion();
 
 	if ( version_compare( $required_php_version, $php_version, '>' ) ) {
-		wp_load_translations_early();
-
 		$protocol = wp_get_server_protocol();
 		header( sprintf( '%s 500 Internal Server Error', $protocol ), true, 500 );
 		header( 'Content-Type: text/html; charset=utf-8' );
-		/* translators: 1: Current PHP version number, 2: WordPress version number, 3: Minimum required PHP version number. */
-		printf( __( 'Your server is running PHP version %1$s but WordPress %2$s requires at least %3$s.' ), $php_version, $wp_version, $required_php_version );
+		printf( 'Your server is running PHP version %1$s but WordPress %2$s requires at least %3$s.', $php_version, $wp_version, $required_php_version );
 		exit( 1 );
 	}
 
@@ -628,7 +625,7 @@ function wp_not_installed() {
  * @since 3.0.0
  * @access private
  *
- * @return array Files to include.
+ * @return string[] Array of absolute paths of files to include.
  */
 function wp_get_mu_plugins() {
 	$mu_plugins = array();
@@ -707,8 +704,8 @@ function wp_get_active_and_valid_plugins() {
  *
  * @since 5.2.0
  *
- * @param array $plugins List of absolute plugin main file paths.
- * @return array Filtered value of $plugins, without any paused plugins.
+ * @param string[] $plugins Array of absolute plugin main file paths.
+ * @return string[] Filtered array of plugins, without any paused plugins.
  */
 function wp_skip_paused_plugins( array $plugins ) {
 	$paused_plugins = wp_paused_plugins()->get_all();
@@ -739,7 +736,7 @@ function wp_skip_paused_plugins( array $plugins ) {
  * @since 5.1.0
  * @access private
  *
- * @return array Array of paths to theme directories.
+ * @return string[] Array of absolute paths to theme directories.
  */
 function wp_get_active_and_valid_themes() {
 	global $pagenow;
@@ -777,8 +774,8 @@ function wp_get_active_and_valid_themes() {
  *
  * @since 5.2.0
  *
- * @param array $themes List of absolute theme directory paths.
- * @return array Filtered value of $themes, without any paused themes.
+ * @param string[] $themes Array of absolute theme directory paths.
+ * @return string[] Filtered array of absolute paths to themes, without any paused themes.
  */
 function wp_skip_paused_themes( array $themes ) {
 	$paused_themes = wp_paused_themes()->get_all();
@@ -885,7 +882,7 @@ function is_protected_ajax_action() {
 	 *
 	 * @since 5.2.0
 	 *
-	 * @param array $actions_to_protect Array of strings with AJAX actions to protect.
+	 * @param string[] $actions_to_protect Array of strings with AJAX actions to protect.
 	 */
 	$actions_to_protect = (array) apply_filters( 'wp_protected_ajax_actions', $actions_to_protect );
 
@@ -925,13 +922,6 @@ function wp_set_internal_encoding() {
  * @access private
  */
 function wp_magic_quotes() {
-	// If already slashed, strip.
-	if ( get_magic_quotes_gpc() ) {
-		$_GET    = stripslashes_deep( $_GET );
-		$_POST   = stripslashes_deep( $_POST );
-		$_COOKIE = stripslashes_deep( $_COOKIE );
-	}
-
 	// Escape with wpdb.
 	$_GET    = add_magic_quotes( $_GET );
 	$_POST   = add_magic_quotes( $_POST );

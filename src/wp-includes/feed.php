@@ -250,7 +250,6 @@ function the_permalink_rss() {
  * Outputs the link to the comments for the current post in an xml safe way
  *
  * @since 3.0.0
- * @return none
  */
 function comments_link_feed() {
 	/**
@@ -738,7 +737,7 @@ function feed_content_type( $type = '' ) {
  * using SimplePie's multifeed feature.
  * See also {@link http://simplepie.org/wiki/faq/typical_multifeed_gotchas}
  *
- * @return WP_Error|SimplePie WP_Error object on failure or SimplePie object on success
+ * @return SimplePie|WP_Error SimplePie object on success or WP_Error object on failure.
  */
 function fetch_feed( $url ) {
 	if ( ! class_exists( 'SimplePie', false ) ) {

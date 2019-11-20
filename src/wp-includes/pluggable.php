@@ -450,10 +450,13 @@ if ( ! function_exists( 'wp_mail' ) ) :
 		 */
 		$phpmailer->CharSet = apply_filters( 'wp_mail_charset', $charset );
 
-		// Set custom headers
+		// Set custom headers.
 		if ( ! empty( $headers ) ) {
 			foreach ( (array) $headers as $name => $content ) {
-				$phpmailer->addCustomHeader( sprintf( '%1$s: %2$s', $name, $content ) );
+				// Only add custom headers not added automatically by PHPMailer.
+				if ( ! in_array( $name, array( 'MIME-Version', 'X-Mailer' ) ) ) {
+					$phpmailer->addCustomHeader( sprintf( '%1$s: %2$s', $name, $content ) );
+				}
 			}
 
 			if ( false !== stripos( $content_type, 'multipart' ) && ! empty( $boundary ) ) {
@@ -568,6 +571,7 @@ if ( ! function_exists( 'wp_logout' ) ) :
 	function wp_logout() {
 		wp_destroy_current_session();
 		wp_clear_auth_cookie();
+		wp_set_current_user( 0 );
 
 		/**
 		 * Fires after a user is logged-out.
@@ -631,7 +635,7 @@ if ( ! function_exists( 'wp_validate_auth_cookie' ) ) :
 			 *
 			 * @since 2.7.0
 			 *
-			 * @param array $cookie_elements An array of data for the authentication cookie.
+			 * @param string[] $cookie_elements An array of data for the authentication cookie.
 			 */
 			do_action( 'auth_cookie_expired', $cookie_elements );
 			return false;
@@ -644,7 +648,7 @@ if ( ! function_exists( 'wp_validate_auth_cookie' ) ) :
 			 *
 			 * @since 2.7.0
 			 *
-			 * @param array $cookie_elements An array of data for the authentication cookie.
+			 * @param string[] $cookie_elements An array of data for the authentication cookie.
 			 */
 			do_action( 'auth_cookie_bad_username', $cookie_elements );
 			return false;
@@ -664,7 +668,7 @@ if ( ! function_exists( 'wp_validate_auth_cookie' ) ) :
 			 *
 			 * @since 2.7.0
 			 *
-			 * @param array $cookie_elements An array of data for the authentication cookie.
+			 * @param string[] $cookie_elements An array of data for the authentication cookie.
 			 */
 			do_action( 'auth_cookie_bad_hash', $cookie_elements );
 			return false;
@@ -672,6 +676,13 @@ if ( ! function_exists( 'wp_validate_auth_cookie' ) ) :
 
 		$manager = WP_Session_Tokens::get_instance( $user->ID );
 		if ( ! $manager->verify( $token ) ) {
+			/**
+			 * Fires if a bad session token is encountered.
+			 *
+			 * @since 4.0.0
+			 *
+			 * @param string[] $cookie_elements An array of data for the authentication cookie.
+			 */
 			do_action( 'auth_cookie_bad_session_token', $cookie_elements );
 			return false;
 		}
@@ -686,8 +697,8 @@ if ( ! function_exists( 'wp_validate_auth_cookie' ) ) :
 		 *
 		 * @since 2.7.0
 		 *
-		 * @param array   $cookie_elements An array of data for the authentication cookie.
-		 * @param WP_User $user            User object.
+		 * @param string[] $cookie_elements An array of data for the authentication cookie.
+		 * @param WP_User  $user            User object.
 		 */
 		do_action( 'auth_cookie_valid', $cookie_elements, $user );
 
@@ -754,7 +765,7 @@ if ( ! function_exists( 'wp_parse_auth_cookie' ) ) :
 	 *
 	 * @param string $cookie Authentication cookie.
 	 * @param string $scheme Optional. The cookie scheme to use: 'auth', 'secure_auth', or 'logged_in'.
-	 * @return array|false Authentication cookie components.
+	 * @return string[]|false Authentication cookie components.
 	 */
 	function wp_parse_auth_cookie( $cookie = '', $scheme = '' ) {
 		if ( empty( $cookie ) ) {
@@ -1102,7 +1113,7 @@ if ( ! function_exists( 'check_admin_referer' ) ) :
 	 *                   0-12 hours ago, 2 if the nonce is valid and generated between 12-24 hours ago.
 	 */
 	function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
-		if ( -1 == $action ) {
+		if ( -1 === $action ) {
 			_doing_it_wrong( __FUNCTION__, __( 'You should specify a nonce action to be verified by using the first parameter.' ), '3.2.0' );
 		}
 
@@ -1121,7 +1132,7 @@ if ( ! function_exists( 'check_admin_referer' ) ) :
 		 */
 		do_action( 'check_admin_referer', $action, $result );
 
-		if ( ! $result && ! ( -1 == $action && strpos( $referer, $adminurl ) === 0 ) ) {
+		if ( ! $result && ! ( -1 === $action && strpos( $referer, $adminurl ) === 0 ) ) {
 			wp_nonce_ays( $action );
 			die();
 		}
@@ -1204,6 +1215,7 @@ if ( ! function_exists( 'wp_redirect' ) ) :
 	 *
 	 * @since 1.5.1
 	 * @since 5.1.0 The `$x_redirect_by` parameter was added.
+	 * @since 5.4.0 On invalid status codes, wp_die() is called.
 	 *
 	 * @global bool $is_IIS
 	 *
@@ -1237,6 +1249,10 @@ if ( ! function_exists( 'wp_redirect' ) ) :
 
 		if ( ! $location ) {
 			return false;
+		}
+
+		if ( $status < 300 || 399 < $status ) {
+			wp_die( __( 'HTTP redirect status code must be a redirection code, 3xx.' ) );
 		}
 
 		$location = wp_sanitize_redirect( $location );
@@ -1277,6 +1293,9 @@ if ( ! function_exists( 'wp_sanitize_redirect' ) ) :
 	 * @return string Redirect-sanitized URL.
 	 */
 	function wp_sanitize_redirect( $location ) {
+		// Encode spaces.
+		$location = str_replace( ' ', '%20', $location );
+
 		$regex    = '/
 		(
 			(?: [\xC2-\xDF][\x80-\xBF]        # double-byte sequences   110xxxxx 10xxxxxx
@@ -1293,7 +1312,7 @@ if ( ! function_exists( 'wp_sanitize_redirect' ) ) :
 		$location = preg_replace( '|[^a-z0-9-~+_.?#=&;,/:%!*\[\]()@]|i', '', $location );
 		$location = wp_kses_no_null( $location );
 
-		// remove %0d and %0a from location
+		// Remove %0D and %0A from location.
 		$strip = array( '%0d', '%0a', '%0D', '%0A' );
 		return _deep_replace( $strip, $location );
 	}
@@ -1407,6 +1426,15 @@ if ( ! function_exists( 'wp_validate_redirect' ) ) :
 			return $default;
 		}
 
+		if ( ! isset( $lp['host'] ) && ! empty( $lp['path'] ) && '/' !== $lp['path'][0] ) {
+			$path = '';
+			if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+				$path = dirname( parse_url( 'http://placeholder' . $_SERVER['REQUEST_URI'], PHP_URL_PATH ) . '?' );
+				$path = wp_normalize_path( $path );
+			}
+			$location = '/' . ltrim( $path . '/', '/' ) . $location;
+		}
+
 		// Reject if certain components are set but host is not. This catches urls like https:host.com for which parse_url does not set the host field.
 		if ( ! isset( $lp['host'] ) && ( isset( $lp['scheme'] ) || isset( $lp['user'] ) || isset( $lp['pass'] ) || isset( $lp['port'] ) ) ) {
 			return $default;
@@ -1426,8 +1454,8 @@ if ( ! function_exists( 'wp_validate_redirect' ) ) :
 		 *
 		 * @since 2.3.0
 		 *
-		 * @param array       $hosts An array of allowed hosts.
-		 * @param bool|string $host  The parsed host; empty if not isset.
+		 * @param string[] $hosts An array of allowed host names.
+		 * @param string   $host  The host name of the redirect destination; empty string if not set.
 		 */
 		$allowed_hosts = (array) apply_filters( 'allowed_redirect_hosts', array( $wpp['host'] ), isset( $lp['host'] ) ? $lp['host'] : '' );
 
@@ -1476,8 +1504,8 @@ if ( ! function_exists( 'wp_notify_postauthor' ) ) :
 		 *
 		 * @since 3.7.0
 		 *
-		 * @param array $emails     An array of email addresses to receive a comment notification.
-		 * @param int   $comment_id The comment ID.
+		 * @param string[] $emails     An array of email addresses to receive a comment notification.
+		 * @param int      $comment_id The comment ID.
 		 */
 		$emails = apply_filters( 'comment_notification_recipients', $emails, $comment->comment_ID );
 		$emails = array_filter( $emails );
@@ -1788,8 +1816,8 @@ if ( ! function_exists( 'wp_notify_moderator' ) ) :
 		 *
 		 * @since 3.7.0
 		 *
-		 * @param array $emails     List of email addresses to notify for comment moderation.
-		 * @param int   $comment_id Comment ID.
+		 * @param string[] $emails     List of email addresses to notify for comment moderation.
+		 * @param int      $comment_id Comment ID.
 		 */
 		$emails = apply_filters( 'comment_moderation_recipients', $emails, $comment_id );
 
@@ -2597,10 +2625,10 @@ if ( ! function_exists( 'get_avatar' ) ) :
 		 *
 		 * @since 4.2.0
 		 *
-		 * @param string $avatar      HTML for the user's avatar. Default null.
-		 * @param mixed  $id_or_email The Gravatar to retrieve. Accepts a user_id, gravatar md5 hash,
-		 *                            user email, WP_User object, WP_Post object, or WP_Comment object.
-		 * @param array  $args        Arguments passed to get_avatar_url(), after processing.
+		 * @param string|null $avatar      HTML for the user's avatar. Default null.
+		 * @param mixed       $id_or_email The Gravatar to retrieve. Accepts a user_id, gravatar md5 hash,
+		 *                                 user email, WP_User object, WP_Post object, or WP_Comment object.
+		 * @param array       $args        Arguments passed to get_avatar_url(), after processing.
 		 */
 		$avatar = apply_filters( 'pre_get_avatar', null, $id_or_email, $args );
 

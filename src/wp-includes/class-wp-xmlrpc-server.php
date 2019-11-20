@@ -161,7 +161,7 @@ class wp_xmlrpc_server extends IXR_Server {
 		 *
 		 * @since 1.5.0
 		 *
-		 * @param array $methods An array of XML-RPC methods.
+		 * @param string[] $methods An array of XML-RPC methods, keyed by their methodName.
 		 */
 		$this->methods = apply_filters( 'xmlrpc_methods', $this->methods );
 	}
@@ -177,7 +177,7 @@ class wp_xmlrpc_server extends IXR_Server {
 	 */
 	public function __call( $name, $arguments ) {
 		if ( '_multisite_getUsersBlogs' === $name ) {
-			return call_user_func_array( array( $this, $name ), $arguments );
+			return $this->_multisite_getUsersBlogs( ...$arguments );
 		}
 		return false;
 	}
@@ -286,8 +286,8 @@ class wp_xmlrpc_server extends IXR_Server {
 			 *
 			 * @since 3.5.0
 			 *
-			 * @param string  $error The XML-RPC error message.
-			 * @param WP_User $user  WP_User object.
+			 * @param string   $error The XML-RPC error message.
+			 * @param WP_Error $user  WP_Error object.
 			 */
 			$this->error = apply_filters( 'xmlrpc_login_error', $this->error, $user );
 			return false;
@@ -727,12 +727,12 @@ class wp_xmlrpc_server extends IXR_Server {
 	 *
 	 * @since 3.4.0
 	 *
-	 * @param string|array $args Sanitize single string or array of strings.
-	 * @param int $count         Minimum number of arguments.
-	 * @return bool if `$args` contains at least $count arguments.
+	 * @param array $args  An array of arguments to check.
+	 * @param int   $count Minimum number of arguments.
+	 * @return bool True if `$args` contains at least `$count` arguments, false otherwise.
 	 */
 	protected function minimum_args( $args, $count ) {
-		if ( count( $args ) < $count ) {
+		if ( ! is_array( $args ) || count( $args ) < $count ) {
 			$this->error = new IXR_Error( 400, __( 'Insufficient arguments passed to this XML-RPC method.' ) );
 			return false;
 		}
@@ -6848,7 +6848,7 @@ class wp_xmlrpc_server extends IXR_Server {
 		$remote_ip = preg_replace( '/[^0-9a-fA-F:., ]/', '', $_SERVER['REMOTE_ADDR'] );
 
 		/** This filter is documented in wp-includes/class-http.php */
-		$user_agent = apply_filters( 'http_headers_useragent', 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ), $url );
+		$user_agent = apply_filters( 'http_headers_useragent', 'WordPress/' . get_bloginfo( 'version' ) . '; ' . get_bloginfo( 'url' ), $pagelinkedfrom );
 
 		// Let's check the remote site
 		$http_api_args = array(

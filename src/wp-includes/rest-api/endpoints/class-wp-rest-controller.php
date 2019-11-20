@@ -54,7 +54,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|bool True if the request has read access, WP_Error object otherwise.
+	 * @return true|WP_Error True if the request has read access, WP_Error object otherwise.
 	 */
 	public function get_items_permissions_check( $request ) {
 		/* translators: %s: Method name. */
@@ -67,7 +67,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function get_items( $request ) {
 		/* translators: %s: Method name. */
@@ -80,7 +80,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|bool True if the request has read access for the item, WP_Error object otherwise.
+	 * @return true|WP_Error True if the request has read access for the item, WP_Error object otherwise.
 	 */
 	public function get_item_permissions_check( $request ) {
 		/* translators: %s: Method name. */
@@ -93,7 +93,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function get_item( $request ) {
 		/* translators: %s: Method name. */
@@ -106,7 +106,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|bool True if the request has access to create items, WP_Error object otherwise.
+	 * @return true|WP_Error True if the request has access to create items, WP_Error object otherwise.
 	 */
 	public function create_item_permissions_check( $request ) {
 		/* translators: %s: Method name. */
@@ -119,7 +119,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function create_item( $request ) {
 		/* translators: %s: Method name. */
@@ -132,7 +132,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|bool True if the request has access to update the item, WP_Error object otherwise.
+	 * @return true|WP_Error True if the request has access to update the item, WP_Error object otherwise.
 	 */
 	public function update_item_permissions_check( $request ) {
 		/* translators: %s: Method name. */
@@ -145,7 +145,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function update_item( $request ) {
 		/* translators: %s: Method name. */
@@ -158,7 +158,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|bool True if the request has access to delete the item, WP_Error object otherwise.
+	 * @return true|WP_Error True if the request has access to delete the item, WP_Error object otherwise.
 	 */
 	public function delete_item_permissions_check( $request ) {
 		/* translators: %s: Method name. */
@@ -171,7 +171,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Full data about the request.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function delete_item( $request ) {
 		/* translators: %s: Method name. */
@@ -184,7 +184,7 @@ abstract class WP_REST_Controller {
 	 * @since 4.7.0
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_Error|object The prepared item, or WP_Error object on failure.
+	 * @return object|WP_Error The prepared item, or WP_Error object on failure.
 	 */
 	protected function prepare_item_for_database( $request ) {
 		/* translators: %s: Method name. */
@@ -198,7 +198,7 @@ abstract class WP_REST_Controller {
 	 *
 	 * @param mixed           $item    WordPress representation of the item.
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function prepare_item_for_response( $item, $request ) {
 		/* translators: %s: Method name. */
@@ -474,7 +474,7 @@ abstract class WP_REST_Controller {
 	 *
 	 * @since 4.7.0
 	 *
-	 * @param  string $object_type Optional. The object type.
+	 * @param string $object_type Optional. The object type.
 	 * @return array Registered additional fields (if any), empty array if none or if the object type could
 	 *               not be inferred.
 	 */
@@ -562,7 +562,25 @@ abstract class WP_REST_Controller {
 		if ( in_array( 'id', $fields, true ) ) {
 			$requested_fields[] = 'id';
 		}
-		return array_intersect( $fields, $requested_fields );
+		// Return the list of all requested fields which appear in the schema.
+		return array_reduce(
+			$requested_fields,
+			function( $response_fields, $field ) use ( $fields ) {
+				if ( in_array( $field, $fields, true ) ) {
+					$response_fields[] = $field;
+					return $response_fields;
+				}
+				// Check for nested fields if $field is not a direct match.
+				$nested_fields = explode( '.', $field );
+				// A nested field is included so long as its top-level property is
+				// present in the schema.
+				if ( in_array( $nested_fields[0], $fields, true ) ) {
+					$response_fields[] = $field;
+				}
+				return $response_fields;
+			},
+			array()
+		);
 	}
 
 	/**

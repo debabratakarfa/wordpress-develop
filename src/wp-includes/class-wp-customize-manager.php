@@ -317,7 +317,6 @@ final class WP_Customize_Manager {
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-nav-menu-name-control.php' );
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-nav-menu-locations-control.php' );
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-nav-menu-auto-add-control.php' );
-		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-new-menu-control.php' ); // @todo Remove in a future release. See #42364.
 
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-nav-menus-panel.php' );
 
@@ -325,7 +324,6 @@ final class WP_Customize_Manager {
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-themes-section.php' );
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-sidebar-section.php' );
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-nav-menu-section.php' );
-		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-new-menu-section.php' ); // @todo Remove in a future release. See #42364.
 
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-custom-css-setting.php' );
 		require_once( ABSPATH . WPINC . '/customize/class-wp-customize-filter-setting.php' );
@@ -438,8 +436,8 @@ final class WP_Customize_Manager {
 	 *
 	 * @since 3.4.0
 	 *
-	 * @param mixed $ajax_message Ajax return
-	 * @param mixed $message UI message
+	 * @param string|WP_Error $ajax_message Ajax return.
+	 * @param string          $message      Optional. UI message.
 	 */
 	protected function wp_die( $ajax_message, $message = null ) {
 		if ( $this->doing_ajax() ) {
@@ -1116,8 +1114,9 @@ final class WP_Customize_Manager {
 			return new WP_Error( 'wrong_post_type' );
 		}
 		$changeset_data = json_decode( $changeset_post->post_content, true );
-		if ( function_exists( 'json_last_error' ) && json_last_error() ) {
-			return new WP_Error( 'json_parse_error', '', json_last_error() );
+		$last_error     = json_last_error();
+		if ( $last_error ) {
+			return new WP_Error( 'json_parse_error', '', $last_error );
 		}
 		if ( ! is_array( $changeset_data ) ) {
 			return new WP_Error( 'expected_array' );
@@ -1229,7 +1228,7 @@ final class WP_Customize_Manager {
 					$widget_numbers = array_keys( $settings );
 					if ( count( $widget_numbers ) > 0 ) {
 						$widget_numbers[]               = 1;
-						$max_widget_numbers[ $id_base ] = call_user_func_array( 'max', $widget_numbers );
+						$max_widget_numbers[ $id_base ] = max( ...$widget_numbers );
 					} else {
 						$max_widget_numbers[ $id_base ] = 1;
 					}
@@ -1375,13 +1374,6 @@ final class WP_Customize_Manager {
 						)
 					);
 
-					// In PHP < 5.6 filesize() returns 0 for the temp files unless we clear the file status cache.
-					// Technically, PHP < 5.6.0 || < 5.5.13 || < 5.4.29 but no need to be so targeted.
-					// See https://bugs.php.net/bug.php?id=65701
-					if ( version_compare( PHP_VERSION, '5.6', '<' ) ) {
-						clearstatcache();
-					}
-
 					$attachment_id = media_handle_sideload( $file_array, 0, null, $attachment_post_data );
 					if ( is_wp_error( $attachment_id ) ) {
 						continue;
@@ -1523,7 +1515,27 @@ final class WP_Customize_Manager {
 
 		// Options.
 		foreach ( $options as $name => $value ) {
-			if ( preg_match( '/^{{(?P<symbol>.+)}}$/', $value, $matches ) ) {
+
+			// Serialize the value to check for post symbols.
+			$value = maybe_serialize( $value );
+
+			if ( is_serialized( $value ) ) {
+				if ( preg_match( '/s:\d+:"{{(?P<symbol>.+)}}"/', $value, $matches ) ) {
+					if ( isset( $posts[ $matches['symbol'] ] ) ) {
+						$symbol_match = $posts[ $matches['symbol'] ]['ID'];
+					} elseif ( isset( $attachment_ids[ $matches['symbol'] ] ) ) {
+						$symbol_match = $attachment_ids[ $matches['symbol'] ];
+					}
+
+					// If we have any symbol matches, update the values.
+					if ( isset( $symbol_match ) ) {
+						// Replace found string matches with post IDs.
+						$value = str_replace( $matches[0], "i:{$symbol_match}", $value );
+					} else {
+						continue;
+					}
+				}
+			} elseif ( preg_match( '/^{{(?P<symbol>.+)}}$/', $value, $matches ) ) {
 				if ( isset( $posts[ $matches['symbol'] ] ) ) {
 					$value = $posts[ $matches['symbol'] ]['ID'];
 				} elseif ( isset( $attachment_ids[ $matches['symbol'] ] ) ) {
@@ -1532,6 +1544,9 @@ final class WP_Customize_Manager {
 					continue;
 				}
 			}
+
+			// Unserialize values after checking for post symbols, so they can be properly referenced.
+			$value = maybe_unserialize( $value );
 
 			if ( empty( $changeset_data[ $name ] ) || ! empty( $changeset_data[ $name ]['starter_content'] ) ) {
 				$this->set_post_value( $name, $value );
@@ -1541,7 +1556,28 @@ final class WP_Customize_Manager {
 
 		// Theme mods.
 		foreach ( $theme_mods as $name => $value ) {
-			if ( preg_match( '/^{{(?P<symbol>.+)}}$/', $value, $matches ) ) {
+
+			// Serialize the value to check for post symbols.
+			$value = maybe_serialize( $value );
+
+			// Check if value was serialized.
+			if ( is_serialized( $value ) ) {
+				if ( preg_match( '/s:\d+:"{{(?P<symbol>.+)}}"/', $value, $matches ) ) {
+					if ( isset( $posts[ $matches['symbol'] ] ) ) {
+						$symbol_match = $posts[ $matches['symbol'] ]['ID'];
+					} elseif ( isset( $attachment_ids[ $matches['symbol'] ] ) ) {
+						$symbol_match = $attachment_ids[ $matches['symbol'] ];
+					}
+
+					// If we have any symbol matches, update the values.
+					if ( isset( $symbol_match ) ) {
+						// Replace found string matches with post IDs.
+						$value = str_replace( $matches[0], "i:{$symbol_match}", $value );
+					} else {
+						continue;
+					}
+				}
+			} elseif ( preg_match( '/^{{(?P<symbol>.+)}}$/', $value, $matches ) ) {
 				if ( isset( $posts[ $matches['symbol'] ] ) ) {
 					$value = $posts[ $matches['symbol'] ]['ID'];
 				} elseif ( isset( $attachment_ids[ $matches['symbol'] ] ) ) {
@@ -1550,6 +1586,9 @@ final class WP_Customize_Manager {
 					continue;
 				}
 			}
+
+			// Unserialize values after checking for post symbols, so they can be properly referenced.
+			$value = maybe_unserialize( $value );
 
 			// Handle header image as special case since setting has a legacy format.
 			if ( 'header_image' === $name ) {
@@ -2843,13 +2882,9 @@ final class WP_Customize_Manager {
 		}
 
 		// Gather the data for wp_insert_post()/wp_update_post().
-		$json_options = 0;
-		if ( defined( 'JSON_UNESCAPED_SLASHES' ) ) {
-			$json_options |= JSON_UNESCAPED_SLASHES; // Introduced in PHP 5.4. This is only to improve readability as slashes needn't be escaped in storage.
-		}
-		$json_options |= JSON_PRETTY_PRINT; // Also introduced in PHP 5.4, but WP defines constant for back compat. See WP Trac #30139.
-		$post_array    = array(
-			'post_content' => wp_json_encode( $data, $json_options ),
+		$post_array = array(
+			// JSON_UNESCAPED_SLASHES is only to improve readability as slashes needn't be escaped in storage.
+			'post_content' => wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT ),
 		);
 		if ( $args['title'] ) {
 			$post_array['post_title'] = $args['title'];
@@ -3639,6 +3674,8 @@ final class WP_Customize_Manager {
 	 * @since 3.4.0
 	 * @since 4.5.0 Return added WP_Customize_Setting instance.
 	 *
+	 * @link https://developer.wordpress.org/themes/customize-api
+	 *
 	 * @param WP_Customize_Setting|string $id   Customize Setting object, or ID.
 	 * @param array                       $args {
 	 *  Optional. Array of properties for the new WP_Customize_Setting. Default empty array.
@@ -3650,8 +3687,7 @@ final class WP_Customize_Manager {
 	 *  @type string       $transport             Options for rendering the live preview of changes in Customizer.
 	 *                                            Using 'refresh' makes the change visible by reloading the whole preview.
 	 *                                            Using 'postMessage' allows a custom JavaScript to handle live changes.
-	 * @link https://developer.wordpress.org/themes/customize-api
-	 *                                            Default is 'refresh'
+	 *                                            Default is 'refresh'.
 	 *  @type callable     $validate_callback     Server-side validation callback for the setting's value.
 	 *  @type callable     $sanitize_callback     Callback to filter a Customize setting value in un-slashed form.
 	 *  @type callable     $sanitize_js_callback  Callback to convert a Customize PHP setting value to a value that is
@@ -5936,7 +5972,7 @@ final class WP_Customize_Manager {
 		$video = get_attached_file( absint( $value ) );
 		if ( $video ) {
 			$size = filesize( $video );
-			if ( 8 < $size / pow( 1024, 2 ) ) { // Check whether the size is larger than 8MB.
+			if ( $size > 8 * MB_IN_BYTES ) {
 				$validity->add(
 					'size_too_large',
 					__( 'This video file is too large to use as a header video. Try a shorter video or optimize the compression settings and re-upload a file that is less than 8MB. Or, upload your video to YouTube and link it with the option below.' )

@@ -274,9 +274,9 @@ function wpmu_admin_do_redirect( $url = '' ) {
 	if ( isset( $_GET['ref'] ) && isset( $_POST['ref'] ) && $_GET['ref'] !== $_POST['ref'] ) {
 		wp_die( __( 'A variable mismatch has been detected.' ), __( 'Sorry, you are not allowed to view this item.' ), 400 );
 	} elseif ( isset( $_POST['ref'] ) ) {
-		$ref = $_POST[ 'ref' ];
+		$ref = $_POST['ref'];
 	} elseif ( isset( $_GET['ref'] ) ) {
-		$ref = $_GET[ 'ref' ];
+		$ref = $_GET['ref'];
 	}
 
 	if ( $ref ) {
@@ -472,10 +472,8 @@ function get_admin_users_for_domain( $domain = '', $path = '' ) {
  *     @type int       $limit      Number of sites to limit the query to. Default 100.
  *     @type int       $offset     Exclude the first x sites. Used in combination with the $limit parameter. Default 0.
  * }
- * @return array An empty array if the installation is considered "large" via wp_is_large_network(). Otherwise,
- *               an associative array of site data arrays, each containing the site (network) ID, blog ID,
- *               site domain and path, dates registered and modified, and the language ID. Also, boolean
- *               values for whether the site is public, archived, mature, spam, and/or deleted.
+ * @return array[] An empty array if the installation is considered "large" via wp_is_large_network(). Otherwise,
+ *                 an associative array of WP_Site data as arrays.
  */
 function wp_get_sites( $args = array() ) {
 	_deprecated_function( __FUNCTION__, '4.6.0', 'get_sites()' );

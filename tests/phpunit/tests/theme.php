@@ -18,6 +18,7 @@ class Tests_Theme extends WP_UnitTestCase {
 		'twentysixteen',
 		'twentyseventeen',
 		'twentynineteen',
+		'twentytwenty',
 	);
 
 	function setUp() {
@@ -205,6 +206,33 @@ class Tests_Theme extends WP_UnitTestCase {
 		foreach ( $this->default_themes as $theme ) {
 			if ( wp_get_theme( $theme )->exists() ) {
 				$this->assertEquals( $theme, wp_get_theme( $theme )->get( 'TextDomain' ) );
+			}
+		}
+	}
+
+	/**
+	 * @ticket 48566
+	 */
+	function test_year_in_readme() {
+		// This test is designed to only run on trunk/master.
+		$this->skipOnAutomatedBranches();
+
+		foreach ( $this->default_themes as $theme ) {
+			$wp_theme = wp_get_theme( $theme );
+
+			$path_to_readme_txt = $wp_theme->get_theme_root() . '/' . $wp_theme->get_stylesheet() . '/readme.txt';
+			$this->assertFileExists( $path_to_readme_txt );
+			$readme    = file_get_contents( $path_to_readme_txt );
+			$this_year = gmdate( 'Y' );
+
+			preg_match( '#Copyright (\d+) WordPress.org#', $readme, $matches );
+			if ( $matches ) {
+				$this->assertEquals( $this_year, trim( $matches[1] ), "Bundled themes readme.txt's year needs to be updated to $this_year." );
+			}
+
+			preg_match( '#Copyright 20\d\d-(\d+) WordPress.org#', $readme, $matches );
+			if ( $matches ) {
+				$this->assertEquals( $this_year, trim( $matches[1] ), "Bundled themes readme.txt's year needs to be updated to $this_year." );
 			}
 		}
 	}

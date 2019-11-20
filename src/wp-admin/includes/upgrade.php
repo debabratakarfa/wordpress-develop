@@ -35,7 +35,14 @@ if ( ! function_exists( 'wp_install' ) ) :
 	 * @param string $deprecated    Optional. Not used.
 	 * @param string $user_password Optional. User's chosen password. Default empty (random password).
 	 * @param string $language      Optional. Language chosen. Default empty.
-	 * @return array Array keys 'url', 'user_id', 'password', and 'password_message'.
+	 * @return array {
+	 *     Data for the newly installed site.
+	 *
+	 *     @type string $url              The URL of the site.
+	 *     @type int    $user_id          The ID of the site owner.
+	 *     @type string $password         The password of the site owner, if their user account didn't already exist.
+	 *     @type string $password_message The explanatory message regarding the password.
+	 * }
 	 */
 	function wp_install( $blog_title, $user_name, $user_email, $public, $deprecated = '', $user_password = '', $language = '' ) {
 		if ( ! empty( $deprecated ) ) {
@@ -450,9 +457,11 @@ Commenter avatars come from <a href="https://gravatar.com">Gravatar</a>.'
 					0 => 'search-2',
 					1 => 'recent-posts-2',
 					2 => 'recent-comments-2',
-					3 => 'archives-2',
-					4 => 'categories-2',
-					5 => 'meta-2',
+				),
+				'sidebar-2'           => array(
+					0 => 'archives-2',
+					1 => 'categories-2',
+					2 => 'meta-2',
 				),
 				'array_version'       => 3,
 			)
@@ -630,7 +639,7 @@ if ( ! function_exists( 'wp_upgrade' ) ) :
 
 		$wp_current_db_version = __get_option( 'db_version' );
 
-		// We are up-to-date. Nothing to do.
+		// We are up to date. Nothing to do.
 		if ( $wp_db_version == $wp_current_db_version ) {
 			return;
 		}
@@ -650,13 +659,8 @@ if ( ! function_exists( 'wp_upgrade' ) ) :
 		wp_cache_flush();
 
 		if ( is_multisite() ) {
-			$site_id = get_current_blog_id();
-
-			if ( $wpdb->get_row( $wpdb->prepare( "SELECT blog_id FROM {$wpdb->blog_versions} WHERE blog_id = %d", $site_id ) ) ) {
-				$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->blog_versions} SET db_version = %d WHERE blog_id = %d", $wp_db_version, $site_id ) );
-			} else {
-				$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->blog_versions} ( `blog_id` , `db_version` , `last_updated` ) VALUES ( %d, %d, NOW() );", $site_id, $wp_db_version ) );
-			}
+			update_site_meta( get_current_blog_id(), 'db_version', $wp_db_version );
+			update_site_meta( get_current_blog_id(), 'db_last_updated', microtime() );
 		}
 
 		/**
@@ -687,7 +691,7 @@ function upgrade_all() {
 	global $wp_current_db_version, $wp_db_version;
 	$wp_current_db_version = __get_option( 'db_version' );
 
-	// We are up-to-date. Nothing to do.
+	// We are up to date. Nothing to do.
 	if ( $wp_db_version == $wp_current_db_version ) {
 		return;
 	}
@@ -1056,7 +1060,7 @@ function upgrade_130() {
 			$limit    = $option->dupes - 1;
 			$dupe_ids = $wpdb->get_col( $wpdb->prepare( "SELECT option_id FROM $wpdb->options WHERE option_name = %s LIMIT %d", $option->option_name, $limit ) );
 			if ( $dupe_ids ) {
-				$dupe_ids = join( $dupe_ids, ',' );
+				$dupe_ids = join( ',', $dupe_ids );
 				$wpdb->query( "DELETE FROM $wpdb->options WHERE option_id IN ($dupe_ids)" );
 			}
 		}
@@ -2478,7 +2482,7 @@ function get_alloptions_110() {
  * @param string $setting Option name.
  * @return mixed
  */
-function __get_option( $setting ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionDoubleUnderscore
+function __get_option( $setting ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionDoubleUnderscore,PHPCompatibility.FunctionNameRestrictions.ReservedFunctionNames.FunctionDoubleUnderscore
 	global $wpdb;
 
 	if ( $setting == 'home' && defined( 'WP_HOME' ) ) {

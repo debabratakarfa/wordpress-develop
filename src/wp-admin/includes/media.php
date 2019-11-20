@@ -11,7 +11,7 @@
  *
  * @since 2.5.0
  *
- * @return array default tabs
+ * @return string[] Default tabs.
  */
 function media_upload_tabs() {
 	$_default_tabs = array(
@@ -26,7 +26,7 @@ function media_upload_tabs() {
 	 *
 	 * @since 2.5.0
 	 *
-	 * @param array $_default_tabs An array of media tabs.
+	 * @param string[] $_default_tabs An array of media tabs.
 	 */
 	return apply_filters( 'media_upload_tabs', $_default_tabs );
 }
@@ -308,13 +308,12 @@ function media_handle_upload( $file_id, $post_id, $post_data = array(), $overrid
 	$ext  = pathinfo( $name, PATHINFO_EXTENSION );
 	$name = wp_basename( $name, ".$ext" );
 
-	$url       = $file['url'];
-	$type      = $file['type'];
-	$file      = $file['file'];
-	$title     = sanitize_text_field( $name );
-	$content   = '';
-	$excerpt   = '';
-	$image_ref = false;
+	$url     = $file['url'];
+	$type    = $file['type'];
+	$file    = $file['file'];
+	$title   = sanitize_text_field( $name );
+	$content = '';
+	$excerpt = '';
 
 	if ( preg_match( '#^audio#', $type ) ) {
 		$meta = wp_read_audio_metadata( $file );
@@ -376,11 +375,6 @@ function media_handle_upload( $file_id, $post_id, $post_data = array(), $overrid
 
 		// Use image exif/iptc data for title and caption defaults if possible.
 	} elseif ( 0 === strpos( $type, 'image/' ) ) {
-		// Image file reference passed by the uploader.
-		if ( ! empty( $_POST['_wp_temp_image_ref'] ) ) {
-			$image_ref = preg_replace( '/[^a-zA-Z0-9_]/', '', $_POST['_wp_temp_image_ref'] );
-		}
-
 		$image_meta = wp_read_image_metadata( $file );
 
 		if ( $image_meta ) {
@@ -414,20 +408,15 @@ function media_handle_upload( $file_id, $post_id, $post_data = array(), $overrid
 	$attachment_id = wp_insert_attachment( $attachment, $file, $post_id, true );
 
 	if ( ! is_wp_error( $attachment_id ) ) {
-		// If an image, keep the upload reference until all image sub-sizes are created.
-		if ( $image_ref ) {
-			set_transient( '_wp_temp_image_ref:' . $image_ref, $attachment_id, HOUR_IN_SECONDS );
+		// Set a custom header with the attachment_id.
+		// Used by the browser/client to resume creating image sub-sizes after a PHP fatal error.
+		if ( ! headers_sent() ) {
+			header( 'X-WP-Upload-Attachment-ID: ' . $attachment_id );
 		}
 
 		// The image sub-sizes are created during wp_generate_attachment_metadata().
 		// This is generally slow and may cause timeouts or out of memory errors.
 		wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $file ) );
-
-		// At this point the image is uploaded successfully even if there were specific errors or some sub-sizes were not created.
-		// The transient is not needed any more.
-		if ( $image_ref ) {
-			delete_transient( '_wp_temp_image_ref:' . $image_ref );
-		}
 	}
 
 	return $attachment_id;
@@ -437,14 +426,15 @@ function media_handle_upload( $file_id, $post_id, $post_data = array(), $overrid
  * Handles a side-loaded file in the same way as an uploaded file is handled by media_handle_upload().
  *
  * @since 2.6.0
+ * @since 5.3.0 The `$post_id` parameter was made optional.
  *
  * @param array  $file_array Array similar to a `$_FILES` upload array.
- * @param int    $post_id    The post ID the media is associated with.
+ * @param int    $post_id    Optional. The post ID the media is associated with.
  * @param string $desc       Optional. Description of the side-loaded file. Default null.
  * @param array  $post_data  Optional. Post data to override. Default empty array.
  * @return int|WP_Error The ID of the attachment or a WP_Error on failure.
  */
-function media_handle_sideload( $file_array, $post_id, $desc = null, $post_data = array() ) {
+function media_handle_sideload( $file_array, $post_id = 0, $desc = null, $post_data = array() ) {
 	$overrides = array( 'test_form' => false );
 
 	$time = current_time( 'mysql' );
@@ -514,13 +504,15 @@ function media_handle_sideload( $file_array, $post_id, $desc = null, $post_data 
  * Outputs the iframe to display the media upload page.
  *
  * @since 2.5.0
+ * @since 5.3.0 Formalized the existing and already documented `...$args` parameter
+ *              by adding it to the function signature.
  *
  * @global int $body_id
  *
  * @param callable $content_func Function that outputs the content.
  * @param mixed    ...$args      Optional additional parameters to pass to the callback function when it's called.
  */
-function wp_iframe( $content_func ) {
+function wp_iframe( $content_func, ...$args ) {
 	_wp_admin_html_begin();
 	?>
 	<title><?php bloginfo( 'name' ); ?> &rsaquo; <?php _e( 'Uploads' ); ?> &#8212; <?php _e( 'WordPress' ); ?></title>
@@ -606,8 +598,6 @@ function wp_iframe( $content_func ) {
 	</script>
 	<?php
 
-	$args = func_get_args();
-	$args = array_slice( $args, 1 );
 	call_user_func_array( $content_func, $args );
 
 	/** This action is documented in wp-admin/admin-footer.php */
@@ -664,7 +654,7 @@ function media_buttons( $editor_id = 'content' ) {
 	 *
 	 * @param string $string Media buttons context. Default empty.
 	 */
-	$legacy_filter = apply_filters( 'media_buttons_context', '' );
+	$legacy_filter = apply_filters_deprecated( 'media_buttons_context', array( '' ), '3.5.0', 'media_buttons' );
 
 	if ( $legacy_filter ) {
 		// #WP22559. Close <a> if a plugin started by closing <a> to open their own <a> tag.
@@ -976,14 +966,15 @@ function wp_media_upload_handler() {
  * @since 2.6.0
  * @since 4.2.0 Introduced the `$return` parameter.
  * @since 4.8.0 Introduced the 'id' option within the `$return` parameter.
+ * @since 5.3.0 The `$post_id` parameter was made optional.
  *
  * @param string $file    The URL of the image to download.
- * @param int    $post_id The post ID the media is to be associated with.
+ * @param int    $post_id Optional. The post ID the media is to be associated with.
  * @param string $desc    Optional. Description of the image.
  * @param string $return  Optional. Accepts 'html' (image tag html) or 'src' (URL), or 'id' (attachment ID). Default 'html'.
  * @return string|WP_Error Populated HTML img tag on success, WP_Error object otherwise.
  */
-function media_sideload_image( $file, $post_id, $desc = null, $return = 'html' ) {
+function media_sideload_image( $file, $post_id = 0, $desc = null, $return = 'html' ) {
 	if ( ! empty( $file ) ) {
 
 		// Set variables for storage, fix file filename for query strings.
@@ -1137,8 +1128,8 @@ function image_size_input_fields( $post, $check = '' ) {
 	 *
 	 * @since 3.3.0
 	 *
-	 * @param array $size_names Array of image sizes and their names. Default values
-	 *                          include 'Thumbnail', 'Medium', 'Large', 'Full Size'.
+	 * @param string[] $size_names Array of image size labels keyed by their name. Default values
+	 *                             include 'Thumbnail', 'Medium', 'Large', and 'Full Size'.
 	 */
 	$size_names = apply_filters(
 		'image_size_names_choose',
@@ -3212,7 +3203,7 @@ function edit_form_image_editor( $post ) {
 
 	?>
 
-	<label for="attachment_content"><strong><?php _e( 'Description' ); ?></strong>
+	<label for="attachment_content" class="attachment-content-description"><strong><?php _e( 'Description' ); ?></strong>
 	<?php
 
 	if ( preg_match( '#^(audio|video)/#', $post->post_mime_type ) ) {

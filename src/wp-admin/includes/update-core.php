@@ -786,6 +786,9 @@ $_old_files = array(
 	// 5.1
 	'wp-includes/random_compat/random_bytes_openssl.php',
 	'wp-includes/js/tinymce/wp-tinymce.js.gz',
+	// 5.3
+	'wp-includes/js/wp-a11y.js', // Moved to: wp-includes/js/dist/a11y.js
+	'wp-includes/js/wp-a11y.min.js', // Moved to: wp-includes/js/dist/a11y.min.js
 );
 
 /**
@@ -822,6 +825,7 @@ $_new_bundled_files = array(
 	'themes/twentysixteen/'   => '4.4',
 	'themes/twentyseventeen/' => '4.7',
 	'themes/twentynineteen/'  => '5.0',
+	'themes/twentytwenty/'    => '5.3',
 );
 
 /**
@@ -876,7 +880,7 @@ $_new_bundled_files = array(
  *
  * @param string $from New release unzipped path.
  * @param string $to   Path to old WordPress installation.
- * @return WP_Error|null WP_Error on failure, null on success.
+ * @return null|WP_Error WP_Error on failure, null on success.
  */
 function update_core( $from, $to ) {
 	global $wp_filesystem, $_old_files, $_new_bundled_files, $wpdb;
@@ -993,6 +997,19 @@ function update_core( $from, $to ) {
 				$wp_version,
 				$required_mysql_version,
 				$mysql_version
+			)
+		);
+	}
+
+	// Add a warning when the JSON PHP extension is missing.
+	if ( ! extension_loaded( 'json' ) ) {
+		return new WP_Error(
+			'php_not_compatible_json',
+			sprintf(
+				/* translators: 1: WordPress version number, 2: The PHP extension name needed. */
+				__( 'The update cannot be installed because WordPress %1$s requires the %2$s PHP extension.' ),
+				$wp_version,
+				'JSON'
 			)
 		);
 	}
@@ -1294,10 +1311,10 @@ function update_core( $from, $to ) {
  *
  * @global WP_Filesystem_Base $wp_filesystem
  *
- * @param string $from     source directory
- * @param string $to       destination directory
- * @param array $skip_list a list of files/folders to skip copying
- * @return mixed WP_Error on failure, True on success.
+ * @param string   $from      Source directory.
+ * @param string   $to        Destination directory.
+ * @param string[] $skip_list Array of files/folders to skip copying.
+ * @return true|WP_Error WP_Error on failure, true on success.
  */
 function _copy_dir( $from, $to, $skip_list = array() ) {
 	global $wp_filesystem;
@@ -1308,7 +1325,7 @@ function _copy_dir( $from, $to, $skip_list = array() ) {
 	$to   = trailingslashit( $to );
 
 	foreach ( (array) $dirlist as $filename => $fileinfo ) {
-		if ( in_array( $filename, $skip_list ) ) {
+		if ( in_array( $filename, $skip_list, true ) ) {
 			continue;
 		}
 

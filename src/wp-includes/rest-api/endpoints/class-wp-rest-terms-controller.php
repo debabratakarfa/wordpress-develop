@@ -468,7 +468,7 @@ class WP_REST_Terms_Controller extends WP_REST_Controller {
 			return $fields_update;
 		}
 
-		$request->set_param( 'context', 'view' );
+		$request->set_param( 'context', 'edit' );
 
 		/**
 		 * Fires after a single term is completely created or updated via the REST API.
@@ -541,7 +541,7 @@ class WP_REST_Terms_Controller extends WP_REST_Controller {
 
 		$prepared_term = $this->prepare_item_for_database( $request );
 
-		// Only update the term if we haz something to update.
+		// Only update the term if we have something to update.
 		if ( ! empty( $prepared_term ) ) {
 			$update = wp_update_term( $term->term_id, $term->taxonomy, wp_slash( (array) $prepared_term ) );
 
@@ -570,7 +570,7 @@ class WP_REST_Terms_Controller extends WP_REST_Controller {
 			return $fields_update;
 		}
 
-		$request->set_param( 'context', 'view' );
+		$request->set_param( 'context', 'edit' );
 
 		/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php */
 		do_action( "rest_after_insert_{$this->taxonomy}", $term, $request, false );
@@ -718,7 +718,7 @@ class WP_REST_Terms_Controller extends WP_REST_Controller {
 	 *
 	 * @since 4.7.0
 	 *
-	 * @param obj             $item    Term object.
+	 * @param WP_Term         $item    Term object.
 	 * @param WP_REST_Request $request Request object.
 	 * @return WP_REST_Response $response Response object.
 	 */

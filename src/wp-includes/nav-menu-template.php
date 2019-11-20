@@ -169,8 +169,8 @@ function wp_nav_menu( $args = array() ) {
 		 *
 		 * @since 3.0.0
 		 *
-		 * @param array $tags The acceptable HTML tags for use as menu containers.
-		 *                    Default is array containing 'div' and 'nav'.
+		 * @param string[] $tags The acceptable HTML tags for use as menu containers.
+		 *                       Default is array containing 'div' and 'nav'.
 		 */
 		$allowed_tags = apply_filters( 'wp_nav_menu_container_allowedtags', array( 'div', 'nav' ) );
 		if ( is_string( $args->container ) && in_array( $args->container, $allowed_tags ) ) {
@@ -579,9 +579,8 @@ function _wp_menu_item_classes_by_context( &$menu_items ) {
  */
 function walk_nav_menu_tree( $items, $depth, $r ) {
 	$walker = ( empty( $r->walker ) ) ? new Walker_Nav_Menu : $r->walker;
-	$args   = array( $items, $depth, $r );
 
-	return call_user_func_array( array( $walker, 'walk' ), $args );
+	return $walker->walk( $items, $depth, $r );
 }
 
 /**

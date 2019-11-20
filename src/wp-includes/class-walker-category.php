@@ -97,11 +97,7 @@ class Walker_Category extends Walker {
 	 */
 	public function start_el( &$output, $category, $depth = 0, $args = array(), $id = 0 ) {
 		/** This filter is documented in wp-includes/category-template.php */
-		$cat_name = apply_filters(
-			'list_cats',
-			esc_attr( $category->name ),
-			$category
-		);
+		$cat_name = apply_filters( 'list_cats', esc_attr( $category->name ), $category );
 
 		// Don't generate an element if the category name is empty.
 		if ( '' === $cat_name ) {
@@ -143,7 +139,7 @@ class Walker_Category extends Walker {
 
 		$attributes = '';
 		foreach ( $atts as $attr => $value ) {
-			if ( ! empty( $value ) ) {
+			if ( is_scalar( $value ) && '' !== $value && false !== $value ) {
 				$value       = ( 'href' === $attr ) ? esc_url( $value ) : esc_attr( $value );
 				$attributes .= ' ' . $attr . '="' . $value . '"';
 			}
@@ -210,6 +206,7 @@ class Walker_Category extends Walker {
 				foreach ( $_current_terms as $_current_term ) {
 					if ( $category->term_id == $_current_term->term_id ) {
 						$css_classes[] = 'current-cat';
+						$link          = str_replace( '<a', '<a aria-current="page"', $link );
 					} elseif ( $category->term_id == $_current_term->parent ) {
 						$css_classes[] = 'current-cat-parent';
 					}

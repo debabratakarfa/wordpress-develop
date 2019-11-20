@@ -103,13 +103,11 @@ class WP_REST_Server {
 	 * Checks the authentication headers if supplied.
 	 *
 	 * @since 4.4.0
-	 * @since 5.3.0 Added the `$request` parameter.
 	 *
-	 * @param WP_REST_Request $request Full data about the request.
 	 * @return WP_Error|null WP_Error indicates unsuccessful login, null indicates successful
 	 *                       or no authentication provided
 	 */
-	public function check_authentication( $request ) {
+	public function check_authentication() {
 		/**
 		 * Filters REST authentication errors.
 		 *
@@ -130,13 +128,11 @@ class WP_REST_Server {
 		 * the authentication method was used, and it succeeded.
 		 *
 		 * @since 4.4.0
-		 * @since 5.3.0 Added the `$request` argument.
 		 *
-		 * @param WP_Error|null|bool $result  WP_Error if authentication error, null if authentication
-		 *                                    method wasn't used, true if authentication succeeded.
-		 * @param WP_REST_Request    $request Full data about the request.
+		 * @param WP_Error|null|true $errors WP_Error if authentication error, null if authentication
+		 *                                   method wasn't used, true if authentication succeeded.
 		 */
-		return apply_filters( 'rest_authentication_errors', null, $request );
+		return apply_filters( 'rest_authentication_errors', null );
 	}
 
 	/**
@@ -264,7 +260,8 @@ class WP_REST_Server {
 		 * Filters whether the REST API is enabled.
 		 *
 		 * @since 4.4.0
-		 * @deprecated 4.7.0 Use the rest_authentication_errors filter to restrict access to the API
+		 * @deprecated 4.7.0 Use the {@see 'rest_authentication_errors'} filter to
+		 *                   restrict access to the API.
 		 *
 		 * @param bool $rest_enabled Whether the REST API is enabled. Default true.
 		 */
@@ -327,7 +324,7 @@ class WP_REST_Server {
 			$request->set_method( $_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] );
 		}
 
-		$result = $this->check_authentication( $request );
+		$result = $this->check_authentication();
 
 		if ( ! is_wp_error( $result ) ) {
 			$result = $this->dispatch( $request );
@@ -568,11 +565,6 @@ class WP_REST_Server {
 		$embedded = array();
 
 		foreach ( $data['_links'] as $rel => $links ) {
-			// Ignore links to self, for obvious reasons.
-			if ( 'self' === $rel ) {
-				continue;
-			}
-
 			$embeds = array();
 
 			foreach ( $links as $item ) {
@@ -789,7 +781,7 @@ class WP_REST_Server {
 	 *
 	 * @since 4.4.0
 	 *
-	 * @return array List of registered namespaces.
+	 * @return string[] List of registered namespaces.
 	 */
 	public function get_namespaces() {
 		return array_keys( $this->namespaces );
@@ -1005,14 +997,9 @@ class WP_REST_Server {
 	 * @return bool|string Boolean false or string error message.
 	 */
 	protected function get_json_last_error() {
-		// See https://core.trac.wordpress.org/ticket/27799.
-		if ( ! function_exists( 'json_last_error' ) ) {
-			return false;
-		}
-
 		$last_error_code = json_last_error();
 
-		if ( ( defined( 'JSON_ERROR_NONE' ) && JSON_ERROR_NONE === $last_error_code ) || empty( $last_error_code ) ) {
+		if ( JSON_ERROR_NONE === $last_error_code || empty( $last_error_code ) ) {
 			return false;
 		}
 
@@ -1031,7 +1018,7 @@ class WP_REST_Server {
 	 *
 	 *     @type string $context Context.
 	 * }
-	 * @return array Index entity
+	 * @return WP_REST_Response The API root index data.
 	 */
 	public function get_index( $request ) {
 		// General site data.
@@ -1114,7 +1101,7 @@ class WP_REST_Server {
 	 *
 	 * @param array  $routes  Routes to get data for.
 	 * @param string $context Optional. Context for data. Accepts 'view' or 'help'. Default 'view'.
-	 * @return array Route data to expose in indexes.
+	 * @return array[] Route data to expose in indexes, keyed by route.
 	 */
 	public function get_data_for_routes( $routes, $context = 'view' ) {
 		$available = array();
@@ -1145,8 +1132,8 @@ class WP_REST_Server {
 		 *
 		 * @since 4.4.0
 		 *
-		 * @param array $available Map of route to route data.
-		 * @param array $routes    Internal route data as an associative array.
+		 * @param array[] $available Route data to expose in indexes, keyed by route.
+		 * @param array   $routes    Internal route data as an associative array.
 		 */
 		return apply_filters( 'rest_route_data', $available, $routes );
 	}

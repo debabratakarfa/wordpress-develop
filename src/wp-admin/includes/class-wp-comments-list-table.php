@@ -487,6 +487,11 @@ class WP_Comments_List_Table extends WP_List_Table {
 	}
 
 	/**
+	 * Displays the comments table.
+	 *
+	 * Overrides the parent display() method to render extra comments.
+	 *
+	 * @since 3.1.0
 	 */
 	public function display() {
 		wp_nonce_field( 'fetch-list-' . get_class( $this ), '_ajax_fetch_list_nonce' );
@@ -534,7 +539,7 @@ class WP_Comments_List_Table extends WP_List_Table {
 
 	/**
 	 * @global WP_Post    $post    Global post object.
-	 * @global WP_Comment $comment
+	 * @global WP_Comment $comment Global comment object.
 	 *
 	 * @param WP_Comment $item
 	 */
@@ -867,6 +872,7 @@ class WP_Comments_List_Table extends WP_List_Table {
 			__( '%1$s at %2$s' ),
 			/* translators: Comment date format. See https://secure.php.net/date */
 			get_comment_date( __( 'Y/m/d' ), $comment ),
+			/* translators: Comment time format. See https://secure.php.net/date */
 			get_comment_date( __( 'g:i a' ), $comment )
 		);
 

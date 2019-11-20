@@ -262,7 +262,8 @@
 
 		if ( 'undefined' !== typeof response.debug && window.console && window.console.log ) {
 			_.map( response.debug, function( message ) {
-				window.console.log( $( '<p />' ).html( message ).text() );
+				// Remove all HTML tags and write a message to the console.
+				window.console.log( wp.sanitize.stripTagsAndEncodeText( message ) );
 			} );
 		}
 	};
@@ -2415,7 +2416,7 @@
 		 */
 		$( window ).on( 'message', function( event ) {
 			var originalEvent  = event.originalEvent,
-				expectedOrigin = document.location.protocol + '//' + document.location.hostname,
+				expectedOrigin = document.location.protocol + '//' + document.location.host,
 				message;
 
 			if ( originalEvent.origin !== expectedOrigin ) {

@@ -49,11 +49,15 @@ class WP_REST_Revisions_Controller extends WP_REST_Controller {
 	 */
 	public function __construct( $parent_post_type ) {
 		$this->parent_post_type  = $parent_post_type;
-		$this->parent_controller = new WP_REST_Posts_Controller( $parent_post_type );
 		$this->namespace         = 'wp/v2';
 		$this->rest_base         = 'revisions';
 		$post_type_object        = get_post_type_object( $parent_post_type );
 		$this->parent_base       = ! empty( $post_type_object->rest_base ) ? $post_type_object->rest_base : $post_type_object->name;
+		$this->parent_controller = $post_type_object->get_rest_controller();
+
+		if ( ! $this->parent_controller ) {
+			$this->parent_controller = new WP_REST_Posts_Controller( $parent_post_type );
+		}
 	}
 
 	/**
@@ -130,7 +134,7 @@ class WP_REST_Revisions_Controller extends WP_REST_Controller {
 	 *
 	 * @since 4.7.2
 	 *
-	 * @param int $id Supplied ID.
+	 * @param int $parent Supplied ID.
 	 * @return WP_Post|WP_Error Post object if ID is valid, WP_Error otherwise.
 	 */
 	protected function get_parent( $parent ) {
@@ -368,7 +372,7 @@ class WP_REST_Revisions_Controller extends WP_REST_Controller {
 	 *
 	 * @since 4.7.0
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
+	 * @param WP_REST_Request $request Full details about the request.
 	 * @return bool|WP_Error True if the request has access to delete the item, WP_Error object otherwise.
 	 */
 	public function delete_item_permissions_check( $request ) {
@@ -427,9 +431,9 @@ class WP_REST_Revisions_Controller extends WP_REST_Controller {
 		 *
 		 * @since 4.7.0
 		 *
-		 * @param (mixed) $result The revision object (if it was deleted or moved to the trash successfully)
-		 *                        or false (failure). If the revision was moved to the trash, $result represents
-		 *                        its new state; if it was deleted, $result represents its state before deletion.
+		 * @param WP_Post|false|null $result The revision object (if it was deleted or moved to the trash successfully)
+		 *                                   or false or null (failure). If the revision was moved to the trash, $result represents
+		 *                                   its new state; if it was deleted, $result represents its state before deletion.
 		 * @param WP_REST_Request $request The request sent to the API.
 		 */
 		do_action( 'rest_delete_revision', $result, $request );

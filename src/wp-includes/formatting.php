@@ -8,7 +8,10 @@
  */
 
 /**
- * Replaces common plain text characters into formatted entities
+ * Replaces common plain text characters with formatted entities.
+ *
+ * Returns given text with transformations of quotes into smart quotes, apostrophes,
+ * dashes, ellipses, the trademark symbol, and the multiplication symbol.
  *
  * As an example,
  *
@@ -18,13 +21,13 @@
  *
  *     &#8217;cause today&#8217;s effort makes it worth tomorrow&#8217;s &#8220;holiday&#8221; &#8230;
  *
- * Code within certain html blocks are skipped.
+ * Code within certain HTML blocks are skipped.
  *
  * Do not use this function before the {@see 'init'} action hook; everything will break.
  *
  * @since 0.71
  *
- * @global array $wp_cockneyreplace Array of formatted entities for certain common phrases
+ * @global array $wp_cockneyreplace Array of formatted entities for certain common phrases.
  * @global array $shortcode_tags
  * @staticvar array  $static_characters
  * @staticvar array  $static_replacements
@@ -44,9 +47,9 @@
  * @staticvar string $open_sq_flag
  * @staticvar string $apos_flag
  *
- * @param string $text The text to be formatted
+ * @param string $text  The text to be formatted.
  * @param bool   $reset Set to true for unit testing. Translated patterns will reset.
- * @return string The string replaced with html entities
+ * @return string The string replaced with HTML entities.
  */
 function wptexturize( $text, $reset = false ) {
 	global $wp_cockneyreplace, $shortcode_tags;
@@ -227,7 +230,7 @@ function wptexturize( $text, $reset = false ) {
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param array $default_no_texturize_tags An array of HTML element names.
+	 * @param string[] $default_no_texturize_tags An array of HTML element names.
 	 */
 	$no_texturize_tags = apply_filters( 'no_texturize_tags', $default_no_texturize_tags );
 	/**
@@ -235,7 +238,7 @@ function wptexturize( $text, $reset = false ) {
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param array $default_no_texturize_shortcodes An array of shortcode names.
+	 * @param string[] $default_no_texturize_shortcodes An array of shortcode names.
 	 */
 	$no_texturize_shortcodes = apply_filters( 'no_texturize_shortcodes', $default_no_texturize_shortcodes );
 
@@ -394,9 +397,9 @@ function wptexturize_primes( $haystack, $needle, $prime, $open_quote, $close_quo
  * @since 2.9.0
  * @access private
  *
- * @param string $text Text to check. Must be a tag like `<html>` or `[shortcode]`.
- * @param array  $stack List of open tag elements.
- * @param array  $disabled_elements The tag names to match against. Spaces are not allowed in tag names.
+ * @param string   $text              Text to check. Must be a tag like `<html>` or `[shortcode]`.
+ * @param string[] $stack             Array of open tag elements.
+ * @param string[] $disabled_elements Array of tag names to match against. Spaces are not allowed in tag names.
  */
 function _wptexturize_pushpop_element( $text, &$stack, $disabled_elements ) {
 	// Is it an opening tag or closing tag?
@@ -619,7 +622,7 @@ function wpautop( $pee, $br = true ) {
  * @since 4.2.4
  *
  * @param string $input The text which has to be formatted.
- * @return array The formatted text.
+ * @return string[] Array of the formatted text.
  */
 function wp_html_split( $input ) {
 	return preg_split( get_html_split_regex(), $input, -1, PREG_SPLIT_DELIM_CAPTURE );
@@ -733,10 +736,9 @@ function _get_wptexturize_split_regex( $shortcode_regex = '' ) {
  *
  * @access private
  * @ignore
- * @internal This function will be removed in 4.5.0 per Shortcode API Roadmap.
  * @since 4.4.0
  *
- * @param array $tagnames List of shortcodes to find.
+ * @param string[] $tagnames Array of shortcodes to find.
  * @return string The regular expression
  */
 function _get_wptexturize_shortcode_regex( $tagnames ) {
@@ -1997,8 +1999,8 @@ function remove_accents( $string ) {
  *
  * @since 2.1.0
  *
- * @param string $filename The filename to be sanitized
- * @return string The sanitized filename
+ * @param string $filename The filename to be sanitized.
+ * @return string The sanitized filename.
  */
 function sanitize_file_name( $filename ) {
 	$filename_raw  = $filename;
@@ -2008,8 +2010,8 @@ function sanitize_file_name( $filename ) {
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param array  $special_chars Characters to remove.
-	 * @param string $filename_raw  Filename as it was passed into sanitize_file_name().
+	 * @param string[] $special_chars Array of characters to remove.
+	 * @param string   $filename_raw  The original filename to be sanitized.
 	 */
 	$special_chars = apply_filters( 'sanitize_file_name_chars', $special_chars, $filename_raw );
 	$filename      = preg_replace( "#\x{00a0}#siu", ' ', $filename );
@@ -2713,10 +2715,6 @@ function untrailingslashit( $string ) {
  * @return string Returns a string escaped with slashes.
  */
 function addslashes_gpc( $gpc ) {
-	if ( get_magic_quotes_gpc() ) {
-		$gpc = stripslashes( $gpc );
-	}
-
 	return wp_slash( $gpc );
 }
 
@@ -2839,7 +2837,24 @@ function _make_url_clickable_cb( $matches ) {
 		return $matches[0];
 	}
 
-	return $matches[1] . "<a href=\"$url\" rel=\"nofollow\">$url</a>" . $suffix;
+	if ( 'comment_text' === current_filter() ) {
+		$rel = 'nofollow ugc';
+	} else {
+		$rel = 'nofollow';
+	}
+
+	/**
+	 * Filters the rel value that is added to URL matches converted to links.
+	 *
+	 * @since 5.3.0
+	 *
+	 * @param string $rel The rel value.
+	 * @param string $url The matched URL being converted to a link tag.
+	 */
+	$rel = apply_filters( 'make_clickable_rel', $rel, $url );
+	$rel = esc_attr( $rel );
+
+	return $matches[1] . "<a href=\"$url\" rel=\"$rel\">$url</a>" . $suffix;
 }
 
 /**
@@ -2869,7 +2884,17 @@ function _make_web_ftp_clickable_cb( $matches ) {
 		return $matches[0];
 	}
 
-	return $matches[1] . "<a href=\"$dest\" rel=\"nofollow\">$dest</a>$ret";
+	if ( 'comment_text' === current_filter() ) {
+		$rel = 'nofollow ugc';
+	} else {
+		$rel = 'nofollow';
+	}
+
+	/** This filter is documented in wp-includes/formatting.php */
+	$rel = apply_filters( 'make_clickable_rel', $rel, $dest );
+	$rel = esc_attr( $rel );
+
+	return $matches[1] . "<a href=\"$dest\" rel=\"$rel\">$dest</a>$ret";
 }
 
 /**
@@ -3016,7 +3041,50 @@ function _split_str_by_whitespace( $string, $goal ) {
 }
 
 /**
- * Adds rel nofollow string to all HTML A elements in content.
+ * Callback to add a rel attribute to HTML A element.
+ *
+ * Will remove already existing string before adding to prevent invalidating (X)HTML.
+ *
+ * @since 5.3.0
+ *
+ * @param array  $matches Single match.
+ * @param string $rel     The rel attribute to add.
+ * @return string HTML A element with the added rel attribute.
+ */
+function wp_rel_callback( $matches, $rel ) {
+	$text = $matches[1];
+	$atts = wp_kses_hair( $matches[1], wp_allowed_protocols() );
+
+	if ( ! empty( $atts['href'] ) ) {
+		if ( in_array( strtolower( wp_parse_url( $atts['href']['value'], PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
+			if ( strtolower( wp_parse_url( $atts['href']['value'], PHP_URL_HOST ) ) === strtolower( wp_parse_url( home_url(), PHP_URL_HOST ) ) ) {
+				return "<a $text>";
+			}
+		}
+	}
+
+	if ( ! empty( $atts['rel'] ) ) {
+		$parts     = array_map( 'trim', explode( ' ', $atts['rel']['value'] ) );
+		$rel_array = array_map( 'trim', explode( ' ', $rel ) );
+		$parts     = array_unique( array_merge( $parts, $rel_array ) );
+		$rel       = implode( ' ', $parts );
+		unset( $atts['rel'] );
+
+		$html = '';
+		foreach ( $atts as $name => $value ) {
+			if ( isset( $value['vless'] ) && 'y' === $value['vless'] ) {
+				$html .= $name . ' ';
+			} else {
+				$html .= "{$name}=\"" . esc_attr( $value['value'] ) . '" ';
+			}
+		}
+		$text = trim( $html );
+	}
+	return "<a $text rel=\"" . esc_attr( $rel ) . '">';
+}
+
+/**
+ * Adds `rel="nofollow"` string to all HTML A elements in content.
  *
  * @since 1.5.0
  *
@@ -3024,51 +3092,50 @@ function _split_str_by_whitespace( $string, $goal ) {
  * @return string Converted content.
  */
 function wp_rel_nofollow( $text ) {
-	// This is a pre save filter, so text is already escaped.
+	// This is a pre-save filter, so text is already escaped.
 	$text = stripslashes( $text );
-	$text = preg_replace_callback( '|<a (.+?)>|i', 'wp_rel_nofollow_callback', $text );
+	$text = preg_replace_callback(
+		'|<a (.+?)>|i',
+		function( $matches ) {
+			return wp_rel_callback( $matches, 'nofollow' );
+		},
+		$text
+	);
 	return wp_slash( $text );
 }
 
 /**
- * Callback to add rel=nofollow string to HTML A element.
- *
- * Will remove already existing rel="nofollow" and rel='nofollow' from the
- * string to prevent from invalidating (X)HTML.
+ * Callback to add `rel="nofollow"` string to HTML A element.
  *
  * @since 2.3.0
+ * @deprecated 5.3.0 Use wp_rel_callback()
  *
- * @param array $matches Single Match
- * @return string HTML A Element with rel nofollow.
+ * @param array $matches Single match.
+ * @return string HTML A Element with `rel="nofollow"`.
  */
 function wp_rel_nofollow_callback( $matches ) {
-	$text = $matches[1];
-	$atts = shortcode_parse_atts( $matches[1] );
-	$rel  = 'nofollow';
+	return wp_rel_callback( $matches, 'nofollow' );
+}
 
-	if ( ! empty( $atts['href'] ) ) {
-		if ( in_array( strtolower( wp_parse_url( $atts['href'], PHP_URL_SCHEME ) ), array( 'http', 'https' ), true ) ) {
-			if ( strtolower( wp_parse_url( $atts['href'], PHP_URL_HOST ) ) === strtolower( wp_parse_url( home_url(), PHP_URL_HOST ) ) ) {
-				return "<a $text>";
-			}
-		}
-	}
-
-	if ( ! empty( $atts['rel'] ) ) {
-		$parts = array_map( 'trim', explode( ' ', $atts['rel'] ) );
-		if ( false === array_search( 'nofollow', $parts ) ) {
-			$parts[] = 'nofollow';
-		}
-		$rel = implode( ' ', $parts );
-		unset( $atts['rel'] );
-
-		$html = '';
-		foreach ( $atts as $name => $value ) {
-			$html .= "{$name}=\"" . esc_attr( $value ) . '" ';
-		}
-		$text = trim( $html );
-	}
-	return "<a $text rel=\"" . esc_attr( $rel ) . '">';
+/**
+ * Adds `rel="nofollow ugc"` string to all HTML A elements in content.
+ *
+ * @since 5.3.0
+ *
+ * @param string $text Content that may contain HTML A elements.
+ * @return string Converted content.
+ */
+function wp_rel_ugc( $text ) {
+	// This is a pre-save filter, so text is already escaped.
+	$text = stripslashes( $text );
+	$text = preg_replace_callback(
+		'|<a (.+?)>|i',
+		function( $matches ) {
+			return wp_rel_callback( $matches, 'nofollow ugc' );
+		},
+		$text
+	);
+	return wp_slash( $text );
 }
 
 /**
@@ -3110,7 +3177,7 @@ function wp_targeted_link_rel_callback( $matches ) {
 	 *
 	 * @since 5.1.0
 	 *
-	 * @param string The rel values.
+	 * @param string $rel       The rel values.
 	 * @param string $link_html The matched content of the link tag including all HTML attributes.
 	 */
 	$rel = apply_filters( 'wp_targeted_link_rel', 'noopener noreferrer', $link_html );
@@ -3836,8 +3903,8 @@ function ent2ncr( $text ) {
 	 *
 	 * @since 3.3.0
 	 *
-	 * @param null   $converted_text The text to be converted. Default null.
-	 * @param string $text           The text prior to entity conversion.
+	 * @param string|null $converted_text The text to be converted. Default null.
+	 * @param string      $text           The text prior to entity conversion.
 	 */
 	$filtered = apply_filters( 'pre_ent2ncr', null, $text );
 	if ( null !== $filtered ) {
@@ -4200,10 +4267,10 @@ function esc_sql( $data ) {
  *
  * @since 2.8.0
  *
- * @param string $url       The URL to be cleaned.
- * @param array  $protocols Optional. An array of acceptable protocols.
- *                          Defaults to return value of wp_allowed_protocols()
- * @param string $_context  Private. Use esc_url_raw() for database usage.
+ * @param string   $url       The URL to be cleaned.
+ * @param string[] $protocols Optional. An array of acceptable protocols.
+ *                            Defaults to return value of wp_allowed_protocols()
+ * @param string   $_context  Private. Use esc_url_raw() for database usage.
  * @return string The cleaned $url after the {@see 'clean_url'} filter is applied.
  */
 function esc_url( $url, $protocols = null, $_context = 'display' ) {
@@ -4308,8 +4375,8 @@ function esc_url( $url, $protocols = null, $_context = 'display' ) {
  *
  * @since 2.8.0
  *
- * @param string $url       The URL to be cleaned.
- * @param array  $protocols An array of acceptable protocols.
+ * @param string   $url       The URL to be cleaned.
+ * @param string[] $protocols An array of acceptable protocols.
  * @return string The cleaned URL.
  */
 function esc_url_raw( $url, $protocols = null ) {
@@ -4778,8 +4845,6 @@ function map_deep( $value, $callback ) {
 /**
  * Parses a string into variables to be stored in an array.
  *
- * Uses {@link https://secure.php.net/parse_str parse_str()} and stripslashes if
- * {@link https://secure.php.net/magic_quotes magic_quotes_gpc} is on.
  *
  * @since 2.2.1
  *
@@ -4788,9 +4853,7 @@ function map_deep( $value, $callback ) {
  */
 function wp_parse_str( $string, &$array ) {
 	parse_str( $string, $array );
-	if ( get_magic_quotes_gpc() ) {
-		$array = stripslashes_deep( $array );
-	}
+
 	/**
 	 * Filters the array of variables derived from a parsed string.
 	 *
@@ -4834,14 +4897,16 @@ function wp_pre_kses_less_than_callback( $matches ) {
  * WordPress implementation of PHP sprintf() with filters.
  *
  * @since 2.5.0
+ * @since 5.3.0 Formalized the existing and already documented `...$args` parameter
+ *              by adding it to the function signature.
+ *
  * @link https://secure.php.net/sprintf
  *
  * @param string $pattern The string which formatted args are inserted.
  * @param mixed  ...$args Arguments to be formatted into the $pattern string.
  * @return string The formatted string.
  */
-function wp_sprintf( $pattern ) {
-	$args      = func_get_args();
+function wp_sprintf( $pattern, ...$args ) {
 	$len       = strlen( $pattern );
 	$start     = 0;
 	$result    = '';
@@ -4871,11 +4936,12 @@ function wp_sprintf( $pattern ) {
 		if ( $pattern[ $start ] == '%' ) {
 			// Find numbered arguments or take the next one in order
 			if ( preg_match( '/^%(\d+)\$/', $fragment, $matches ) ) {
-				$arg      = isset( $args[ $matches[1] ] ) ? $args[ $matches[1] ] : '';
+				$index    = $matches[1] - 1; // 0-based array vs 1-based sprintf arguments.
+				$arg      = isset( $args[ $index ] ) ? $args[ $index ] : '';
 				$fragment = str_replace( "%{$matches[1]}$", '%', $fragment );
 			} else {
-				++$arg_index;
 				$arg = isset( $args[ $arg_index ] ) ? $args[ $arg_index ] : '';
+				++$arg_index;
 			}
 
 			/**
@@ -5053,9 +5119,9 @@ function _links_add_base( $m ) {
  *
  * @global string $_links_add_target
  *
- * @param string $content String to search for links in.
- * @param string $target  The Target to add to the links.
- * @param array  $tags    An array of tags to apply to.
+ * @param string   $content String to search for links in.
+ * @param string   $target  The Target to add to the links.
+ * @param string[] $tags    An array of tags to apply to.
  * @return string The processed content.
  */
 function links_add_target( $content, $target = '_blank', $tags = array( 'a' ) ) {
@@ -5370,6 +5436,33 @@ function wp_unslash( $value ) {
 }
 
 /**
+ * Adds slashes to only string values in an array of values.
+ *
+ * This should be used when preparing data for core APIs that expect slashed data.
+ * This should not be used to escape data going directly into an SQL query.
+ *
+ * @since 5.3.0
+ *
+ * @param mixed $value Scalar or array of scalars.
+ * @return mixed Slashes $value
+ */
+function wp_slash_strings_only( $value ) {
+	return map_deep( $value, 'addslashes_strings_only' );
+}
+
+/**
+ * Adds slashes only if the provided value is a string.
+ *
+ * @since 5.3.0
+ *
+ * @param mixed $value
+ * @return mixed
+ */
+function addslashes_strings_only( $value ) {
+	return is_string( $value ) ? addslashes( $value ) : $value;
+}
+
+/**
  * Extract and return the first URL from passed content.
  *
  * @since 3.6.0
@@ -5439,8 +5532,10 @@ function print_emoji_styles() {
 	}
 
 	$printed = true;
+
+	$type_attr = current_theme_supports( 'html5', 'style' ) ? '' : ' type="text/css"';
 	?>
-<style type="text/css">
+<style<?php echo $type_attr; ?>>
 img.wp-smiley,
 img.emoji {
 	display: inline !important;
@@ -5476,7 +5571,7 @@ function print_emoji_detection_script() {
 }
 
 /**
- * Prints inline Emoji dection script
+ * Prints inline Emoji detection script.
  *
  * @ignore
  * @since 4.6.0
@@ -5489,7 +5584,7 @@ function _print_emoji_detection_script() {
 		 *
 		 * @since 4.2.0
 		 *
-		 * @param string The emoji base URL for png images.
+		 * @param string $url The emoji base URL for png images.
 		 */
 		'baseUrl' => apply_filters( 'emoji_url', 'https://s.w.org/images/core/emoji/12.0.0-1/72x72/' ),
 
@@ -5498,7 +5593,7 @@ function _print_emoji_detection_script() {
 		 *
 		 * @since 4.2.0
 		 *
-		 * @param string The emoji extension for png files. Default .png.
+		 * @param string $extension The emoji extension for png files. Default .png.
 		 */
 		'ext'     => apply_filters( 'emoji_ext', '.png' ),
 
@@ -5507,7 +5602,7 @@ function _print_emoji_detection_script() {
 		 *
 		 * @since 4.6.0
 		 *
-		 * @param string The emoji base URL for svg images.
+		 * @param string $url The emoji base URL for svg images.
 		 */
 		'svgUrl'  => apply_filters( 'emoji_svg_url', 'https://s.w.org/images/core/emoji/12.0.0-1/svg/' ),
 
@@ -5516,12 +5611,13 @@ function _print_emoji_detection_script() {
 		 *
 		 * @since 4.6.0
 		 *
-		 * @param string The emoji extension for svg files. Default .svg.
+		 * @param string $extension The emoji extension for svg files. Default .svg.
 		 */
 		'svgExt'  => apply_filters( 'emoji_svg_ext', '.svg' ),
 	);
 
-	$version = 'ver=' . get_bloginfo( 'version' );
+	$version   = 'ver=' . get_bloginfo( 'version' );
+	$type_attr = current_theme_supports( 'html5', 'style' ) ? '' : ' type="text/javascript"';
 
 	if ( SCRIPT_DEBUG ) {
 		$settings['source'] = array(
@@ -5532,7 +5628,7 @@ function _print_emoji_detection_script() {
 		);
 
 		?>
-		<script type="text/javascript">
+		<script<?php echo $type_attr; ?>>
 			window._wpemojiSettings = <?php echo wp_json_encode( $settings ); ?>;
 			<?php readfile( ABSPATH . WPINC . '/js/wp-emoji-loader.js' ); ?>
 		</script>
@@ -5554,7 +5650,7 @@ function _print_emoji_detection_script() {
 		 * and edit wp-emoji-loader.js directly.
 		 */
 		?>
-		<script type="text/javascript">
+		<script<?php echo $type_attr; ?>>
 			window._wpemojiSettings = <?php echo wp_json_encode( $settings ); ?>;
 			include "js/wp-emoji-loader.min.js"
 		</script>
@@ -5573,15 +5669,10 @@ function _print_emoji_detection_script() {
  * @return string The encoded content.
  */
 function wp_encode_emoji( $content ) {
-	$emoji  = _wp_emoji_list( 'partials' );
-	$compat = version_compare( phpversion(), '5.4', '<' );
+	$emoji = _wp_emoji_list( 'partials' );
 
 	foreach ( $emoji as $emojum ) {
-		if ( $compat ) {
-			$emoji_char = html_entity_decode( $emojum, ENT_COMPAT, 'UTF-8' );
-		} else {
-			$emoji_char = html_entity_decode( $emojum );
-		}
+		$emoji_char = html_entity_decode( $emojum );
 		if ( false !== strpos( $content, $emoji_char ) ) {
 			$content = preg_replace( "/$emoji_char/", $emojum, $content );
 		}
@@ -5617,14 +5708,9 @@ function wp_staticize_emoji( $text ) {
 
 	// Quickly narrow down the list of emoji that might be in the text and need replacing.
 	$possible_emoji = array();
-	$compat         = version_compare( phpversion(), '5.4', '<' );
 	foreach ( $emoji as $emojum ) {
 		if ( false !== strpos( $text, $emojum ) ) {
-			if ( $compat ) {
-				$possible_emoji[ $emojum ] = html_entity_decode( $emojum, ENT_COMPAT, 'UTF-8' );
-			} else {
-				$possible_emoji[ $emojum ] = html_entity_decode( $emojum );
-			}
+			$possible_emoji[ $emojum ] = html_entity_decode( $emojum );
 		}
 	}
 

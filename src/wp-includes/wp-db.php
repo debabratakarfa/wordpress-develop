@@ -306,7 +306,6 @@ class wpdb {
 		'sitemeta',
 		'sitecategories',
 		'registration_log',
-		'blog_versions',
 	);
 
 	/**
@@ -424,14 +423,6 @@ class wpdb {
 	 * @var string
 	 */
 	public $blogmeta;
-
-	/**
-	 * Multisite Blog Versions table
-	 *
-	 * @since 3.0.0
-	 * @var string
-	 */
-	public $blog_versions;
 
 	/**
 	 * Multisite Registration Log table
@@ -751,7 +742,12 @@ class wpdb {
 	 *
 	 * @param string $charset The character set to check.
 	 * @param string $collate The collation to check.
-	 * @return array The most appropriate character set and collation to use.
+	 * @return array {
+	 *     The most appropriate character set and collation to use.
+	 *
+	 *     @type string $charset Character set.
+	 *     @type string $collate Collation.
+	 * }
 	 */
 	public function determine_charset( $charset, $collate ) {
 		if ( ( $this->use_mysqli && ! ( $this->dbh instanceof mysqli ) ) || empty( $this->dbh ) ) {
@@ -1289,6 +1285,9 @@ class wpdb {
 	 *
 	 * @link https://secure.php.net/sprintf Description of syntax.
 	 * @since 2.3.0
+	 * @since 5.3.0 Formalized the existing and already documented `...$args` parameter
+	 *              by updating the function signature. The second parameter was changed
+	 *              from `$args` to `...$args`.
 	 *
 	 * @param string      $query   Query statement with sprintf()-like placeholders
 	 * @param array|mixed $args    The array of variables to substitute into the query's placeholders
@@ -2712,8 +2711,8 @@ class wpdb {
 		 *
 		 * @since 4.2.0
 		 *
-		 * @param string $charset The character set to use. Default null.
-		 * @param string $table   The name of the table being checked.
+		 * @param string|null $charset The character set to use. Default null.
+		 * @param string      $table   The name of the table being checked.
 		 */
 		$charset = apply_filters( 'pre_get_table_charset', null, $table );
 		if ( null !== $charset ) {
@@ -2816,9 +2815,9 @@ class wpdb {
 		 *
 		 * @since 4.2.0
 		 *
-		 * @param string $charset The character set to use. Default null.
-		 * @param string $table   The name of the table being checked.
-		 * @param string $column  The name of the column being checked.
+		 * @param string|null $charset The character set to use. Default null.
+		 * @param string      $table   The name of the table being checked.
+		 * @param string      $column  The name of the column being checked.
 		 */
 		$charset = apply_filters( 'pre_get_col_charset', null, $table, $column );
 		if ( null !== $charset ) {
@@ -3500,7 +3499,7 @@ class wpdb {
 	 * @global string $wp_version
 	 * @global string $required_mysql_version
 	 *
-	 * @return WP_Error|void
+	 * @return void|WP_Error
 	 */
 	public function check_database_version() {
 		global $wp_version, $required_mysql_version;

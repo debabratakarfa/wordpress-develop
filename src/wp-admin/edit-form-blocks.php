@@ -1,6 +1,6 @@
 <?php
 /**
- * The Block Editor page.
+ * The block editor page.
  *
  * @since 5.0.0
  *
@@ -49,6 +49,7 @@ $preload_paths = array(
 	sprintf( '/wp/v2/users/me?post_type=%s&context=edit', $post_type ),
 	array( '/wp/v2/media', 'OPTIONS' ),
 	array( '/wp/v2/blocks', 'OPTIONS' ),
+	sprintf( '/wp/v2/%s/%d/autosaves?context=edit', $rest_base, $post->ID ),
 );
 
 /**
@@ -58,8 +59,8 @@ $preload_paths = array(
  *
  * @since 5.0.0
  *
- * @param array  $preload_paths Array of paths to preload.
- * @param object $post          The post resource data.
+ * @param string[] $preload_paths Array of paths to preload.
+ * @param WP_Post  $post          Post being edited.
  */
 $preload_paths = apply_filters( 'block_editor_preload_paths', $preload_paths, $post );
 

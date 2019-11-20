@@ -1280,7 +1280,7 @@ function wp_title( $sep = '&raquo;', $display = true, $seplocation = '' ) {
 	 *
 	 * @since 4.0.0
 	 *
-	 * @param array $title_array Parts of the page title.
+	 * @param string[] $title_array Array of parts of the page title.
 	 */
 	$title_array = apply_filters( 'wp_title_parts', explode( $t_sep, $title ) );
 
@@ -1735,18 +1735,19 @@ function get_the_post_type_description() {
  * @return string HTML link content for archive.
  */
 function get_archives_link( $url, $text, $format = 'html', $before = '', $after = '', $selected = false ) {
-	$text = wptexturize( $text );
-	$url  = esc_url( $url );
+	$text         = wptexturize( $text );
+	$url          = esc_url( $url );
+	$aria_current = $selected ? ' aria-current="page"' : '';
 
-	if ( 'link' == $format ) {
+	if ( 'link' === $format ) {
 		$link_html = "\t<link rel='archives' title='" . esc_attr( $text ) . "' href='$url' />\n";
-	} elseif ( 'option' == $format ) {
+	} elseif ( 'option' === $format ) {
 		$selected_attr = $selected ? " selected='selected'" : '';
 		$link_html     = "\t<option value='$url'$selected_attr>$before $text $after</option>\n";
-	} elseif ( 'html' == $format ) {
-		$link_html = "\t<li>$before<a href='$url'>$text</a>$after</li>\n";
+	} elseif ( 'html' === $format ) {
+		$link_html = "\t<li>$before<a href='$url'$aria_current>$text</a>$after</li>\n";
 	} else { // custom
-		$link_html = "\t$before<a href='$url'>$text</a>$after\n";
+		$link_html = "\t$before<a href='$url'$aria_current>$text</a>$after\n";
 	}
 
 	/**
@@ -2515,7 +2516,7 @@ function the_time( $d = '' ) {
  * @param string      $d    Optional. Format to use for retrieving the time the post
  *                          was written. Either 'G', 'U', or php date format defaults
  *                          to the value specified in the time_format option. Default empty.
- * @param int|WP_Post $post WP_Post object or ID. Default is global $post object.
+ * @param int|WP_Post $post WP_Post object or ID. Default is global `$post` object.
  * @return string|int|false Formatted date string or Unix timestamp if `$d` is 'U' or 'G'. False on failure.
  */
 function get_the_time( $d = '', $post = null ) {
@@ -2553,7 +2554,7 @@ function get_the_time( $d = '', $post = null ) {
  * @param string      $d         Optional. Format to use for retrieving the time the post
  *                               was written. Either 'G', 'U', or php date format. Default 'U'.
  * @param bool        $gmt       Optional. Whether to retrieve the GMT time. Default false.
- * @param int|WP_Post $post      WP_Post object or ID. Default is global $post object.
+ * @param int|WP_Post $post      WP_Post object or ID. Default is global `$post` object.
  * @param bool        $translate Whether to translate the time string. Default false.
  * @return string|int|false Formatted date string or Unix timestamp if `$d` is 'U' or 'G'. False on failure.
  */
@@ -2564,13 +2565,29 @@ function get_post_time( $d = 'U', $gmt = false, $post = null, $translate = false
 		return false;
 	}
 
-	if ( $gmt ) {
-		$time = $post->post_date_gmt;
-	} else {
-		$time = $post->post_date;
+	$source   = ( $gmt ) ? 'gmt' : 'local';
+	$datetime = get_post_datetime( $post, 'date', $source );
+
+	if ( false === $datetime ) {
+		return false;
 	}
 
-	$time = mysql2date( $d, $time, $translate );
+	if ( 'U' === $d || 'G' === $d ) {
+		$time = $datetime->getTimestamp();
+
+		// Returns a sum of timestamp with timezone offset. Ideally should never be used.
+		if ( ! $gmt ) {
+			$time += $datetime->getOffset();
+		}
+	} elseif ( $translate ) {
+		$time = wp_date( $d, $datetime->getTimestamp(), $gmt ? new DateTimeZone( 'UTC' ) : null );
+	} else {
+		if ( $gmt ) {
+			$datetime = $datetime->setTimezone( new DateTimeZone( 'UTC' ) );
+		}
+
+		$time = $datetime->format( $d );
+	}
 
 	/**
 	 * Filters the localized time a post was written.
@@ -2583,6 +2600,78 @@ function get_post_time( $d = 'U', $gmt = false, $post = null, $translate = false
 	 * @param bool   $gmt  Whether to retrieve the GMT time. Default false.
 	 */
 	return apply_filters( 'get_post_time', $time, $d, $gmt );
+}
+
+/**
+ * Retrieve post published or modified time as a `DateTimeImmutable` object instance.
+ *
+ * The object will be set to the timezone from WordPress settings.
+ *
+ * For legacy reasons, this function allows to choose to instantiate from local or UTC time in database.
+ * Normally this should make no difference to the result. However, the values might get out of sync in database,
+ * typically because of timezone setting changes. The parameter ensures the ability to reproduce backwards
+ * compatible behaviors in such cases.
+ *
+ * @since 5.3.0
+ *
+ * @param int|WP_Post $post   Optional. WP_Post object or ID. Default is global `$post` object.
+ * @param string      $field  Optional. Published or modified time to use from database. Accepts 'date' or 'modified'.
+ *                            Default 'date'.
+ * @param string      $source Optional. Local or UTC time to use from database. Accepts 'local' or 'gmt'.
+ *                            Default 'local'.
+ * @return DateTimeImmutable|false Time object on success, false on failure.
+ */
+function get_post_datetime( $post = null, $field = 'date', $source = 'local' ) {
+	$post = get_post( $post );
+
+	if ( ! $post ) {
+		return false;
+	}
+
+	$wp_timezone = wp_timezone();
+
+	if ( 'gmt' === $source ) {
+		$time     = ( 'modified' === $field ) ? $post->post_modified_gmt : $post->post_date_gmt;
+		$timezone = new DateTimeZone( 'UTC' );
+	} else {
+		$time     = ( 'modified' === $field ) ? $post->post_modified : $post->post_date;
+		$timezone = $wp_timezone;
+	}
+
+	if ( empty( $time ) || '0000-00-00 00:00:00' === $time ) {
+		return false;
+	}
+
+	$datetime = date_create_immutable_from_format( 'Y-m-d H:i:s', $time, $timezone );
+
+	if ( false === $datetime ) {
+		return false;
+	}
+
+	return $datetime->setTimezone( $wp_timezone );
+}
+
+/**
+ * Retrieve post published or modified time as a Unix timestamp.
+ *
+ * Note that this function returns a true Unix timestamp, not summed with timezone offset
+ * like older WP functions.
+ *
+ * @since 5.3.0
+ *
+ * @param int|WP_Post $post  Optional. WP_Post object or ID. Default is global `$post` object.
+ * @param string      $field Optional. Published or modified time to use from database. Accepts 'date' or 'modified'.
+ *                           Default 'date'.
+ * @return int|false Unix timestamp on success, false on failure.
+ */
+function get_post_timestamp( $post = null, $field = 'date' ) {
+	$datetime = get_post_datetime( $post, $field );
+
+	if ( false === $datetime ) {
+		return false;
+	}
+
+	return $datetime->getTimestamp();
 }
 
 /**
@@ -2653,7 +2742,7 @@ function get_the_modified_time( $d = '', $post = null ) {
  * @param string      $d         Optional. Format to use for retrieving the time the post
  *                               was modified. Either 'G', 'U', or php date format. Default 'U'.
  * @param bool        $gmt       Optional. Whether to retrieve the GMT time. Default false.
- * @param int|WP_Post $post      WP_Post object or ID. Default is global $post object.
+ * @param int|WP_Post $post      WP_Post object or ID. Default is global `$post` object.
  * @param bool        $translate Whether to translate the time string. Default false.
  * @return string|int|false Formatted date string or Unix timestamp if `$d` is 'U' or 'G'. False on failure.
  */
@@ -2664,13 +2753,29 @@ function get_post_modified_time( $d = 'U', $gmt = false, $post = null, $translat
 		return false;
 	}
 
-	if ( $gmt ) {
-		$time = $post->post_modified_gmt;
-	} else {
-		$time = $post->post_modified;
+	$source   = ( $gmt ) ? 'gmt' : 'local';
+	$datetime = get_post_datetime( $post, 'modified', $source );
+
+	if ( false === $datetime ) {
+		return false;
 	}
 
-	$time = mysql2date( $d, $time, $translate );
+	if ( 'U' === $d || 'G' === $d ) {
+		$time = $datetime->getTimestamp();
+
+		// Returns a sum of timestamp with timezone offset. Ideally should never be used.
+		if ( ! $gmt ) {
+			$time += $datetime->getOffset();
+		}
+	} elseif ( $translate ) {
+		$time = wp_date( $d, $datetime->getTimestamp(), $gmt ? new DateTimeZone( 'UTC' ) : null );
+	} else {
+		if ( $gmt ) {
+			$datetime = $datetime->setTimezone( new DateTimeZone( 'UTC' ) );
+		}
+
+		$time = $datetime->format( $d );
+	}
 
 	/**
 	 * Filters the localized time a post was last modified.
@@ -2793,13 +2898,13 @@ function wp_footer() {
 /**
  * Fire the wp_body_open action.
  *
- * * See {@see 'wp_body_open'}.
+ * See {@see 'wp_body_open'}.
  *
  * @since 5.2.0
  */
 function wp_body_open() {
 	/**
-	 * Triggered after the opening <body> tag.
+	 * Triggered after the opening body tag.
 	 *
 	 * @since 5.2.0
 	 */
@@ -3045,7 +3150,7 @@ function wp_site_icon() {
 	}
 	$icon_180 = get_site_icon_url( 180 );
 	if ( $icon_180 ) {
-		$meta_tags[] = sprintf( '<link rel="apple-touch-icon-precomposed" href="%s" />', esc_url( $icon_180 ) );
+		$meta_tags[] = sprintf( '<link rel="apple-touch-icon" href="%s" />', esc_url( $icon_180 ) );
 	}
 	$icon_270 = get_site_icon_url( 270 );
 	if ( $icon_270 ) {
@@ -3181,7 +3286,7 @@ function wp_resource_hints() {
  *
  * @since 4.6.0
  *
- * @return array A list of unique hosts of enqueued scripts and styles.
+ * @return string[] A list of unique hosts of enqueued scripts and styles.
  */
 function wp_dependencies_unique_hosts() {
 	global $wp_scripts, $wp_styles;
@@ -4042,6 +4147,7 @@ function paginate_links( $args = '' ) {
 	if ( $mid_size < 0 ) {
 		$mid_size = 2;
 	}
+
 	$add_args   = $args['add_args'];
 	$r          = '';
 	$page_links = array();
@@ -4055,19 +4161,29 @@ function paginate_links( $args = '' ) {
 		}
 		$link .= $args['add_fragment'];
 
-		/**
-		 * Filters the paginated links for the given archive pages.
-		 *
-		 * @since 3.0.0
-		 *
-		 * @param string $link The paginated link URL.
-		 */
-		$page_links[] = '<a class="prev page-numbers" href="' . esc_url( apply_filters( 'paginate_links', $link ) ) . '">' . $args['prev_text'] . '</a>';
+		$page_links[] = sprintf(
+			'<a class="prev page-numbers" href="%s">%s</a>',
+			/**
+			 * Filters the paginated links for the given archive pages.
+			 *
+			 * @since 3.0.0
+			 *
+			 * @param string $link The paginated link URL.
+			 */
+			esc_url( apply_filters( 'paginate_links', $link ) ),
+			$args['prev_text']
+		);
 	endif;
+
 	for ( $n = 1; $n <= $total; $n++ ) :
 		if ( $n == $current ) :
-			$page_links[] = "<span aria-current='" . esc_attr( $args['aria_current'] ) . "' class='page-numbers current'>" . $args['before_page_number'] . number_format_i18n( $n ) . $args['after_page_number'] . '</span>';
-			$dots         = true;
+			$page_links[] = sprintf(
+				'<span aria-current="%s" class="page-numbers current">%s</span>',
+				esc_attr( $args['aria_current'] ),
+				$args['before_page_number'] . number_format_i18n( $n ) . $args['after_page_number']
+			);
+
+			$dots = true;
 		else :
 			if ( $args['show_all'] || ( $n <= $end_size || ( $current && $n >= $current - $mid_size && $n <= $current + $mid_size ) || $n > $total - $end_size ) ) :
 				$link = str_replace( '%_%', 1 == $n ? '' : $args['format'], $args['base'] );
@@ -4077,15 +4193,22 @@ function paginate_links( $args = '' ) {
 				}
 				$link .= $args['add_fragment'];
 
-				/** This filter is documented in wp-includes/general-template.php */
-				$page_links[] = "<a class='page-numbers' href='" . esc_url( apply_filters( 'paginate_links', $link ) ) . "'>" . $args['before_page_number'] . number_format_i18n( $n ) . $args['after_page_number'] . '</a>';
-				$dots         = true;
+				$page_links[] = sprintf(
+					'<a class="page-numbers" href="%s">%s</a>',
+					/** This filter is documented in wp-includes/general-template.php */
+					esc_url( apply_filters( 'paginate_links', $link ) ),
+					$args['before_page_number'] . number_format_i18n( $n ) . $args['after_page_number']
+				);
+
+				$dots = true;
 			elseif ( $dots && ! $args['show_all'] ) :
 				$page_links[] = '<span class="page-numbers dots">' . __( '&hellip;' ) . '</span>';
-				$dots         = false;
+
+				$dots = false;
 			endif;
 		endif;
 	endfor;
+
 	if ( $args['prev_next'] && $current && $current < $total ) :
 		$link = str_replace( '%_%', $args['format'], $args['base'] );
 		$link = str_replace( '%#%', $current + 1, $link );
@@ -4094,9 +4217,14 @@ function paginate_links( $args = '' ) {
 		}
 		$link .= $args['add_fragment'];
 
-		/** This filter is documented in wp-includes/general-template.php */
-		$page_links[] = '<a class="next page-numbers" href="' . esc_url( apply_filters( 'paginate_links', $link ) ) . '">' . $args['next_text'] . '</a>';
+		$page_links[] = sprintf(
+			'<a class="next page-numbers" href="%s">%s</a>',
+			/** This filter is documented in wp-includes/general-template.php */
+			esc_url( apply_filters( 'paginate_links', $link ) ),
+			$args['next_text']
+		);
 	endif;
+
 	switch ( $args['type'] ) {
 		case 'array':
 			return $page_links;
@@ -4111,6 +4239,7 @@ function paginate_links( $args = '' ) {
 			$r = join( "\n", $page_links );
 			break;
 	}
+
 	return $r;
 }
 
@@ -4322,17 +4451,24 @@ function wp_admin_css_uri( $file = 'wp-admin' ) {
  * @param bool   $force_echo Optional. Force the stylesheet link to be printed rather than enqueued.
  */
 function wp_admin_css( $file = 'wp-admin', $force_echo = false ) {
-	// For backward compatibility
+	// For backward compatibility.
 	$handle = 0 === strpos( $file, 'css/' ) ? substr( $file, 4 ) : $file;
 
 	if ( wp_styles()->query( $handle ) ) {
-		if ( $force_echo || did_action( 'wp_print_styles' ) ) { // we already printed the style queue. Print this one immediately
+		if ( $force_echo || did_action( 'wp_print_styles' ) ) {
+			// We already printed the style queue. Print this one immediately.
 			wp_print_styles( $handle );
-		} else { // Add to style queue
+		} else {
+			// Add to style queue.
 			wp_enqueue_style( $handle );
 		}
 		return;
 	}
+
+	$stylesheet_link = sprintf(
+		"<link rel='stylesheet' href='%s' type='text/css' />\n",
+		esc_url( wp_admin_css_uri( $file ) )
+	);
 
 	/**
 	 * Filters the stylesheet link to the specified CSS file.
@@ -4345,11 +4481,16 @@ function wp_admin_css( $file = 'wp-admin', $force_echo = false ) {
 	 * @param string $file            Style handle name or filename (without ".css" extension)
 	 *                                relative to wp-admin/. Defaults to 'wp-admin'.
 	 */
-	echo apply_filters( 'wp_admin_css', "<link rel='stylesheet' href='" . esc_url( wp_admin_css_uri( $file ) ) . "' type='text/css' />\n", $file );
+	echo apply_filters( 'wp_admin_css', $stylesheet_link, $file );
 
 	if ( function_exists( 'is_rtl' ) && is_rtl() ) {
+		$rtl_stylesheet_link = sprintf(
+			"<link rel='stylesheet' href='%s' type='text/css' />\n",
+			esc_url( wp_admin_css_uri( "$file-rtl" ) )
+		);
+
 		/** This filter is documented in wp-includes/general-template.php */
-		echo apply_filters( 'wp_admin_css', "<link rel='stylesheet' href='" . esc_url( wp_admin_css_uri( "$file-rtl" ) ) . "' type='text/css' />\n", "$file-rtl" );
+		echo apply_filters( 'wp_admin_css', $rtl_stylesheet_link, "$file-rtl" );
 	}
 }
 
@@ -4568,7 +4709,7 @@ function readonly( $readonly, $current = true, $echo = true ) {
  * @param string $type    The type of checked|selected|disabled|readonly we are doing
  * @return string html attribute or empty string
  */
-function __checked_selected_helper( $helper, $current, $echo, $type ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionDoubleUnderscore
+function __checked_selected_helper( $helper, $current, $echo, $type ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.FunctionDoubleUnderscore,PHPCompatibility.FunctionNameRestrictions.ReservedFunctionNames.FunctionDoubleUnderscore
 	if ( (string) $helper === (string) $current ) {
 		$result = " $type='$type'";
 	} else {

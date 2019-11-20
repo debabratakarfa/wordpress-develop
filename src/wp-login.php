@@ -27,6 +27,12 @@ if ( force_ssl_admin() && ! is_ssl() ) {
  *
  * @since 2.1.0
  *
+ * @global string      $error         Login error message set by deprecated pluggable wp_login() function
+ *                                    or plugins replacing it.
+ * @global bool|string $interim_login Whether interim login modal is being displayed. String 'success'
+ *                                    upon successful login.
+ * @global string      $action        The action that brought the visitor to the login page.
+ *
  * @param string   $title    Optional. WordPress login Page title to display in the `<title>` element.
  *                           Default 'Log In'.
  * @param string   $message  Optional. Message to display in header. Default empty.
@@ -135,7 +141,7 @@ function login_header( $title = 'Log In', $message = '', $wp_error = null ) {
 	 * Filters the title attribute of the header logo above login form.
 	 *
 	 * @since 2.1.0
-	 * @deprecated 5.2.0 Use login_headertext
+	 * @deprecated 5.2.0 Use {@see 'login_headertext'} instead.
 	 *
 	 * @param string $login_header_title Login header logo title attribute.
 	 */
@@ -190,7 +196,10 @@ function login_header( $title = 'Log In', $message = '', $wp_error = null ) {
 
 	?>
 	</head>
-	<body class="login <?php echo esc_attr( implode( ' ', $classes ) ); ?>">
+	<body class="login no-js <?php echo esc_attr( implode( ' ', $classes ) ); ?>">
+	<script type="text/javascript">
+		document.body.className = document.body.className.replace('no-js','js');
+	</script>
 	<?php
 	/**
 	 * Fires in the login page header after the body tag is opened.
@@ -265,6 +274,9 @@ function login_header( $title = 'Log In', $message = '', $wp_error = null ) {
  * Outputs the footer for the login page.
  *
  * @since 3.1.0
+ *
+ * @global bool|string $interim_login Whether interim login modal is being displayed. String 'success'
+ *                                    upon successful login.
  *
  * @param string $input_id Which input to auto-focus.
  */
@@ -351,7 +363,8 @@ function wp_login_viewport_meta() {
  * @return bool|WP_Error True: when finish. WP_Error on error
  */
 function retrieve_password() {
-	$errors = new WP_Error();
+	$errors    = new WP_Error();
+	$user_data = false;
 
 	if ( empty( $_POST['user_login'] ) || ! is_string( $_POST['user_login'] ) ) {
 		$errors->add( 'empty_username', __( '<strong>ERROR</strong>: Enter a username or email address.' ) );
@@ -361,7 +374,7 @@ function retrieve_password() {
 			$errors->add( 'invalid_email', __( '<strong>ERROR</strong>: There is no account with that username or email address.' ) );
 		}
 	} else {
-		$login     = trim( $_POST['user_login'] );
+		$login     = trim( wp_unslash( $_POST['user_login'] ) );
 		$user_data = get_user_by( 'login', $login );
 	}
 
@@ -370,11 +383,13 @@ function retrieve_password() {
 	 *
 	 * @since 2.1.0
 	 * @since 4.4.0 Added the `$errors` parameter.
+	 * @since 5.4.0 Added the `$user_data` parameter.
 	 *
 	 * @param WP_Error $errors A WP_Error object containing any errors generated
 	 *                         by using invalid credentials.
+	 * @param WP_User|false    WP_User object if found, false if the user does not exist.
 	 */
-	do_action( 'lostpassword_post', $errors );
+	do_action( 'lostpassword_post', $errors, $user_data );
 
 	if ( $errors->has_errors() ) {
 		return $errors;
@@ -591,7 +606,7 @@ switch ( $action ) {
 			 *
 			 * @since 5.3.0
 			 *
-			 * @param int Interval time (in seconds).
+			 * @param int $interval Interval time (in seconds).
 			 */
 			$admin_email_check_interval = (int) apply_filters( 'admin_email_check_interval', 6 * MONTH_IN_SECONDS );
 
@@ -603,7 +618,7 @@ switch ( $action ) {
 			exit;
 		}
 
-		login_header( __( 'Confirm your admin email' ), '', $errors );
+		login_header( __( 'Confirm your administration email' ), '', $errors );
 
 		/**
 		* Fires before the admin email confirm form.
@@ -640,10 +655,14 @@ switch ( $action ) {
 				/* translators: URL to the WordPress help section about admin email. */
 				$admin_email_help_url = __( 'https://wordpress.org/support/article/settings-general-screen/#email-address' );
 
+				/* translators: accessibility text */
+				$accessibility_text = sprintf( '<span class="screen-reader-text"> %s</span>', __( '(opens in a new tab)' ) );
+
 				printf(
-					'<a href="%s" rel="noopener noreferrer" target="_blank">%s</a>',
+					'<a href="%s" rel="noopener noreferrer" target="_blank">%s%s</a>',
 					esc_url( $admin_email_help_url ),
-					__( 'Why is this important?' )
+					__( 'Why is this important?' ),
+					$accessibility_text
 				);
 
 				?>
@@ -661,15 +680,6 @@ switch ( $action ) {
 			</p>
 			<p class="admin-email__details">
 				<?php _e( 'This email may be different from your personal email address.' ); ?>
-				<?php
-
-				printf(
-					'<a href="%s" rel="noopener noreferrer" target="_blank">%s</a>',
-					esc_url( $admin_email_help_url ),
-					__( 'Learn more.' )
-				);
-
-				?>
 			</p>
 
 			<div class="admin-email__actions">
@@ -828,8 +838,8 @@ switch ( $action ) {
 
 		<form name="lostpasswordform" id="lostpasswordform" action="<?php echo esc_url( network_site_url( 'wp-login.php?action=lostpassword', 'login_post' ) ); ?>" method="post">
 			<p>
-				<label for="user_login" ><?php _e( 'Username or Email Address' ); ?><br />
-				<input type="text" name="user_login" id="user_login" class="input" value="<?php echo esc_attr( $user_login ); ?>" size="20" autocapitalize="off" /></label>
+				<label for="user_login"><?php _e( 'Username or Email Address' ); ?></label>
+				<input type="text" name="user_login" id="user_login" class="input" value="<?php echo esc_attr( $user_login ); ?>" size="20" autocapitalize="off" />
 			</p>
 			<?php
 
@@ -943,24 +953,21 @@ switch ( $action ) {
 				</p>
 
 				<div class="wp-pwd">
-					<div class="password-input-wrapper">
-						<input type="password" data-reveal="1" data-pw="<?php echo esc_attr( wp_generate_password( 16 ) ); ?>" name="pass1" id="pass1" class="input password-input" size="24" value="" autocomplete="off" aria-describedby="pass-strength-result" />
-						<button type="button" class="button button-secondary wp-hide-pw hide-if-no-js">
-							<span class="dashicons dashicons-hidden" aria-hidden="true"></span>
-						</button>
-					</div>
+					<input type="password" data-reveal="1" data-pw="<?php echo esc_attr( wp_generate_password( 16 ) ); ?>" name="pass1" id="pass1" class="input password-input" size="24" value="" autocomplete="off" aria-describedby="pass-strength-result" />
+
+					<button type="button" class="button button-secondary wp-hide-pw hide-if-no-js" data-toggle="0" aria-label="<?php esc_attr_e( 'Hide password' ); ?>">
+						<span class="dashicons dashicons-hidden" aria-hidden="true"></span>
+					</button>
 					<div id="pass-strength-result" class="hide-if-no-js" aria-live="polite"><?php _e( 'Strength indicator' ); ?></div>
 				</div>
 				<div class="pw-weak">
-					<label>
-						<input type="checkbox" name="pw_weak" class="pw-checkbox" />
-						<?php _e( 'Confirm use of weak password' ); ?>
-					</label>
+					<input type="checkbox" name="pw_weak" id="pw-weak" class="pw-checkbox" />
+					<label for="pw-weak"><?php _e( 'Confirm use of weak password' ); ?></label>
 				</div>
 			</div>
 
 			<p class="user-pass2-wrap">
-				<label for="pass2"><?php _e( 'Confirm new password' ); ?></label><br />
+				<label for="pass2"><?php _e( 'Confirm new password' ); ?></label>
 				<input type="password" name="pass2" id="pass2" class="input" size="20" value="" autocomplete="off" />
 			</p>
 
@@ -1028,7 +1035,7 @@ switch ( $action ) {
 
 		if ( $http_post ) {
 			if ( isset( $_POST['user_login'] ) && is_string( $_POST['user_login'] ) ) {
-				$user_login = $_POST['user_login'];
+				$user_login = wp_unslash( $_POST['user_login'] );
 			}
 
 			if ( isset( $_POST['user_email'] ) && is_string( $_POST['user_email'] ) ) {
@@ -1060,12 +1067,12 @@ switch ( $action ) {
 		?>
 		<form name="registerform" id="registerform" action="<?php echo esc_url( site_url( 'wp-login.php?action=register', 'login_post' ) ); ?>" method="post" novalidate="novalidate">
 			<p>
-				<label for="user_login"><?php _e( 'Username' ); ?><br />
-				<input type="text" name="user_login" id="user_login" class="input" value="<?php echo esc_attr( wp_unslash( $user_login ) ); ?>" size="20" autocapitalize="off" /></label>
+				<label for="user_login"><?php _e( 'Username' ); ?></label>
+				<input type="text" name="user_login" id="user_login" class="input" value="<?php echo esc_attr( wp_unslash( $user_login ) ); ?>" size="20" autocapitalize="off" />
 			</p>
 			<p>
-				<label for="user_email"><?php _e( 'Email' ); ?><br />
-				<input type="email" name="user_email" id="user_email" class="input" value="<?php echo esc_attr( wp_unslash( $user_email ) ); ?>" size="25" /></label>
+				<label for="user_email"><?php _e( 'Email' ); ?></label>
+				<input type="email" name="user_email" id="user_email" class="input" value="<?php echo esc_attr( wp_unslash( $user_email ) ); ?>" size="25" />
 			</p>
 			<?php
 
@@ -1146,7 +1153,7 @@ switch ( $action ) {
 
 		// If the user wants SSL but the session is not SSL, force a secure cookie.
 		if ( ! empty( $_POST['log'] ) && ! force_ssl_admin() ) {
-			$user_name = sanitize_user( $_POST['log'] );
+			$user_name = sanitize_user( wp_unslash( $_POST['log'] ) );
 			$user      = get_user_by( 'login', $user_name );
 
 			if ( ! $user && strpos( $user_name, '@' ) ) {
@@ -1244,14 +1251,14 @@ switch ( $action ) {
 				// If `0` (or anything "falsey" as it is cast to int) is returned, the user will not be redirected
 				// to the admin email confirmation screen.
 				/** This filter is documented in wp-login.php */
-				$admin_email_check_interval = (int) apply_filters( 'admin_email_check_interval', 180 * DAY_IN_SECONDS );
+				$admin_email_check_interval = (int) apply_filters( 'admin_email_check_interval', 6 * MONTH_IN_SECONDS );
 
 				if ( $admin_email_check_interval > 0 && time() > $admin_email_lifespan ) {
 					$redirect_to = add_query_arg( 'action', 'confirm_admin_email', wp_login_url( $redirect_to ) );
 				}
 			}
 
-			if ( ( empty( $redirect_to ) || $redirect_to === 'wp-admin/' || $redirect_to == admin_url() ) ) {
+			if ( ( empty( $redirect_to ) || $redirect_to === 'wp-admin/' || $redirect_to === admin_url() ) ) {
 				// If the user doesn't belong to a blog, send them to user admin. If the user can't edit posts, send them to their profile.
 				if ( is_multisite() && ! get_active_blog_for_user( $user->ID ) && ! is_super_admin( $user->ID ) ) {
 					$redirect_to = user_admin_url();
@@ -1331,17 +1338,24 @@ switch ( $action ) {
 			$aria_describedby_error = '';
 		}
 
+		wp_enqueue_script( 'user-profile' );
 		?>
 
 		<form name="loginform" id="loginform" action="<?php echo esc_url( site_url( 'wp-login.php', 'login_post' ) ); ?>" method="post">
 			<p>
-				<label for="user_login"><?php _e( 'Username or Email Address' ); ?><br />
-				<input type="text" name="log" id="user_login"<?php echo $aria_describedby_error; ?> class="input" value="<?php echo esc_attr( $user_login ); ?>" size="20" autocapitalize="off" /></label>
+				<label for="user_login"><?php _e( 'Username or Email Address' ); ?></label>
+				<input type="text" name="log" id="user_login"<?php echo $aria_describedby_error; ?> class="input" value="<?php echo esc_attr( $user_login ); ?>" size="20" autocapitalize="off" />
 			</p>
-			<p>
-				<label for="user_pass"><?php _e( 'Password' ); ?><br />
-				<input type="password" name="pwd" id="user_pass"<?php echo $aria_describedby_error; ?> class="input" value="" size="20" /></label>
-			</p>
+
+			<div class="user-pass-wrap">
+				<label for="user_pass"><?php _e( 'Password' ); ?></label>
+				<div class="wp-pwd">
+					<input type="password" name="pwd" id="user_pass"<?php echo $aria_describedby_error; ?> class="input password-input" value="" size="20" />
+					<button type="button" class="button button-secondary wp-hide-pw hide-if-no-js" data-toggle="0" aria-label="<?php esc_attr_e( 'Show password' ); ?>">
+						<span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+					</button>
+				</div>
+			</div>
 			<?php
 
 			/**
@@ -1352,7 +1366,7 @@ switch ( $action ) {
 			do_action( 'login_form' );
 
 			?>
-			<p class="forgetmenot"><label for="rememberme"><input name="rememberme" type="checkbox" id="rememberme" value="forever" <?php checked( $rememberme ); ?> /> <?php esc_html_e( 'Remember Me' ); ?></label></p>
+			<p class="forgetmenot"><input name="rememberme" type="checkbox" id="rememberme" value="forever" <?php checked( $rememberme ); ?> /> <label for="rememberme"><?php esc_html_e( 'Remember Me' ); ?></label></p>
 			<p class="submit">
 				<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e( 'Log In' ); ?>" />
 				<?php

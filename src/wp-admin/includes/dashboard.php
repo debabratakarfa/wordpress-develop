@@ -623,7 +623,7 @@ function wp_dashboard_recent_drafts( $drafts = false ) {
  * @access private
  * @since 2.7.0
  *
- * @global WP_Comment $comment
+ * @global WP_Comment $comment Global comment object.
  *
  * @param WP_Comment $comment   The current comment.
  * @param bool       $show_date Optional. Whether to display the date.
@@ -1055,6 +1055,8 @@ function wp_dashboard_rss_output( $widget_id ) {
  * which is later replaced by Ajax call (see top of /wp-admin/index.php)
  *
  * @since 2.5.0
+ * @since 5.3.0 Formalized the existing and already documented `...$args` parameter
+ *              by adding it to the function signature.
  *
  * @param string   $widget_id  The widget ID.
  * @param callable $callback   The callback funtion used to display each feed.
@@ -1062,7 +1064,7 @@ function wp_dashboard_rss_output( $widget_id ) {
  * @param mixed    ...$args    Optional additional parameters to pass to the callback function when it's called.
  * @return bool False on failure. True on success.
  */
-function wp_dashboard_cached_rss_widget( $widget_id, $callback, $check_urls = array() ) {
+function wp_dashboard_cached_rss_widget( $widget_id, $callback, $check_urls = array(), ...$args ) {
 	$loading    = '<p class="widget-loading hide-if-no-js">' . __( 'Loading&hellip;' ) . '</p><div class="hide-if-js notice notice-error inline"><p>' . __( 'This widget requires JavaScript.' ) . '</p></div>';
 	$doing_ajax = wp_doing_ajax();
 
@@ -1089,7 +1091,6 @@ function wp_dashboard_cached_rss_widget( $widget_id, $callback, $check_urls = ar
 	}
 
 	if ( $callback && is_callable( $callback ) ) {
-		$args = array_slice( func_get_args(), 3 );
 		array_unshift( $args, $widget_id, $check_urls );
 		ob_start();
 		call_user_func_array( $callback, $args );
@@ -1730,8 +1731,8 @@ function wp_dashboard_php_nag() {
  *
  * @since 5.1.0
  *
- * @param array $classes Metabox classes.
- * @return array Modified metabox classes.
+ * @param string[] $classes Array of metabox classes.
+ * @return string[] Modified array of metabox classes.
  */
 function dashboard_php_nag_class( $classes ) {
 	$response = wp_check_php_version();

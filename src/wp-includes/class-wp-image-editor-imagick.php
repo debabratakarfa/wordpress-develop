@@ -83,11 +83,6 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 			return false;
 		}
 
-		// HHVM Imagick does not support loading from URL, so fail to allow fallback to GD.
-		if ( defined( 'HHVM_VERSION' ) && isset( $args['path'] ) && preg_match( '|^https?://|', $args['path'] ) ) {
-			return false;
-		}
-
 		return true;
 	}
 
@@ -458,8 +453,15 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 	 *
 	 * @since 5.3.0
 	 *
-	 * @param array $size_data Array of width, height, and whether to crop.
-	 * @return WP_Error|array WP_Error on error, or the image data array for inclusion in the `sizes` array in the image meta.
+	 * @param array $size_data {
+	 *     Array of size data.
+	 *
+	 *     @type int  $width  The maximum width in pixels.
+	 *     @type int  $height The maximum height in pixels.
+	 *     @type bool $crop   Whether to crop the image to exact dimensions.
+	 * }
+	 * @return array|WP_Error The image data array for inclusion in the `sizes` array in the image meta,
+	 *                        WP_Error object on error.
 	 */
 	public function make_subsize( $size_data ) {
 		if ( ! isset( $size_data['width'] ) && ! isset( $size_data['height'] ) ) {
@@ -566,7 +568,7 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 		try {
 			$this->image->rotateImage( new ImagickPixel( 'none' ), 360 - $angle );
 
-			// Normalise Exif orientation data so that display is consistent across devices.
+			// Normalise EXIF orientation data so that display is consistent across devices.
 			if ( is_callable( array( $this->image, 'setImageOrientation' ) ) && defined( 'Imagick::ORIENTATION_TOPLEFT' ) ) {
 				$this->image->setImageOrientation( Imagick::ORIENTATION_TOPLEFT );
 			}
@@ -602,10 +604,35 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 			if ( $vert ) {
 				$this->image->flopImage();
 			}
+
+			// Normalise EXIF orientation data so that display is consistent across devices.
+			if ( is_callable( array( $this->image, 'setImageOrientation' ) ) && defined( 'Imagick::ORIENTATION_TOPLEFT' ) ) {
+				$this->image->setImageOrientation( Imagick::ORIENTATION_TOPLEFT );
+			}
 		} catch ( Exception $e ) {
 			return new WP_Error( 'image_flip_error', $e->getMessage() );
 		}
+
 		return true;
+	}
+
+	/**
+	 * Check if a JPEG image has EXIF Orientation tag and rotate it if needed.
+	 *
+	 * As ImageMagick copies the EXIF data to the flipped/rotated image, proceed only
+	 * if EXIF Orientation can be reset afterwards.
+	 *
+	 * @since 5.3.0
+	 *
+	 * @return bool|WP_Error True if the image was rotated. False if no EXIF data or if the image doesn't need rotation.
+	 *                       WP_Error if error while rotating.
+	 */
+	public function maybe_exif_rotate() {
+		if ( is_callable( array( $this->image, 'setImageOrientation' ) ) && defined( 'Imagick::ORIENTATION_TOPLEFT' ) ) {
+			return parent::maybe_exif_rotate();
+		} else {
+			return new WP_Error( 'write_exif_error', __( 'The image cannot be rotated because the embedded meta data cannot be updated.' ) );
+		}
 	}
 
 	/**
@@ -665,9 +692,9 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 		$perms = $stat['mode'] & 0000666; //same permissions as parent folder, strip off the executable bits
 		chmod( $filename, $perms );
 
-		/** This filter is documented in wp-includes/class-wp-image-editor-gd.php */
 		return array(
 			'path'      => $filename,
+			/** This filter is documented in wp-includes/class-wp-image-editor-gd.php */
 			'file'      => wp_basename( apply_filters( 'image_make_intermediate_size', $filename ) ),
 			'width'     => $this->size['width'],
 			'height'    => $this->size['height'],
@@ -766,6 +793,10 @@ class WP_Image_Editor_Imagick extends WP_Image_Editor {
 			// By default, PDFs are rendered in a very low resolution.
 			// We want the thumbnail to be readable, so increase the rendering DPI.
 			$this->image->setResolution( 128, 128 );
+
+			// When generating thumbnails from cropped PDF pages, Imagemagick uses the uncropped
+			// area (resulting in unnecessary whitespace) unless the following option is set.
+			$this->image->setOption( 'pdf:use-cropbox', true );
 
 			// Only load the first page.
 			return $this->file . '[0]';

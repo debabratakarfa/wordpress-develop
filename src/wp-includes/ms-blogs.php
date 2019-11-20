@@ -249,7 +249,7 @@ function get_blog_details( $fields = null, $get_all = true ) {
 	 * Filters a blog's details.
 	 *
 	 * @since MU (3.0.0)
-	 * @deprecated 4.7.0 Use site_details
+	 * @deprecated 4.7.0 Use {@see 'site_details'} instead.
 	 *
 	 * @param object $details The blog details.
 	 */
@@ -852,4 +852,51 @@ function _update_posts_count_on_transition_post_status( $new_status, $old_status
 	}
 
 	update_posts_count();
+}
+
+/**
+ * Count number of sites grouped by site status.
+ *
+ * @since 5.3.0
+ *
+ * @param int $network_id Optional. The network to get counts for. Default is the current network ID.
+ * @return int[] {
+ *     Numbers of sites grouped by site status.
+ *
+ *     @type int $all      The total number of sites.
+ *     @type int $public   The number of public sites.
+ *     @type int $archived The number of archived sites.
+ *     @type int $mature   The number of mature sites.
+ *     @type int $spam     The number of spam sites.
+ *     @type int $deleted  The number of deleted sites.
+ * }
+ */
+function wp_count_sites( $network_id = null ) {
+	if ( empty( $network_id ) ) {
+		$network_id = get_current_network_id();
+	}
+
+	$counts = array();
+	$args   = array(
+		'network_id'    => $network_id,
+		'number'        => 1,
+		'fields'        => 'ids',
+		'no_found_rows' => false,
+	);
+
+	$q             = new WP_Site_Query( $args );
+	$counts['all'] = $q->found_sites;
+
+	$_args    = $args;
+	$statuses = array( 'public', 'archived', 'mature', 'spam', 'deleted' );
+
+	foreach ( $statuses as $status ) {
+		$_args            = $args;
+		$_args[ $status ] = 1;
+
+		$q                 = new WP_Site_Query( $_args );
+		$counts[ $status ] = $q->found_sites;
+	}
+
+	return $counts;
 }

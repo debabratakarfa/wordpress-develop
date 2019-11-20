@@ -135,7 +135,7 @@ final class WP_Customize_Nav_Menus {
 	 *                         'post_type' and 'taxonomy'. Default is 'post_type'.
 	 * @param string $object Optional. Accepts any registered taxonomy or post type name. Default is 'page'.
 	 * @param int    $page   Optional. The page number used to generate the query offset. Default is '0'.
-	 * @return WP_Error|array Returns either a WP_Error object or an array of menu items.
+	 * @return array|WP_Error An array of menu items on success, a WP_Error object on failure.
 	 */
 	public function load_available_items_query( $type = 'post_type', $object = 'page', $page = 0 ) {
 		$items = array();
@@ -1192,7 +1192,7 @@ final class WP_Customize_Nav_Menus {
 				<input type="hidden" value="custom" id="custom-menu-item-type" name="menu-item[-1][menu-item-type]" />
 				<p id="menu-item-url-wrap" class="wp-clearfix">
 					<label class="howto" for="custom-menu-item-url"><?php _e( 'URL' ); ?></label>
-					<input id="custom-menu-item-url" name="menu-item[-1][menu-item-url]" type="text" class="code menu-item-textbox" value="http://">
+					<input id="custom-menu-item-url" name="menu-item[-1][menu-item-url]" type="text" class="code menu-item-textbox" placeholder="https://">
 				</p>
 				<p id="menu-item-name-wrap" class="wp-clearfix">
 					<label class="howto" for="custom-menu-item-name"><?php _e( 'Link Text' ); ?></label>

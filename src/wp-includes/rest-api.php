@@ -192,13 +192,9 @@ function rest_api_default_filters() {
  */
 function create_initial_rest_routes() {
 	foreach ( get_post_types( array( 'show_in_rest' => true ), 'objects' ) as $post_type ) {
-		$class = ! empty( $post_type->rest_controller_class ) ? $post_type->rest_controller_class : 'WP_REST_Posts_Controller';
+		$controller = $post_type->get_rest_controller();
 
-		if ( ! class_exists( $class ) ) {
-			continue;
-		}
-		$controller = new $class( $post_type->name );
-		if ( ! is_subclass_of( $controller, 'WP_REST_Controller' ) ) {
+		if ( ! $controller ) {
 			continue;
 		}
 
@@ -411,10 +407,10 @@ function get_rest_url( $blog_id = null, $path = '/', $scheme = 'rest' ) {
  * @since 4.4.0
  *
  * @param string $path   Optional. REST route. Default empty.
- * @param string $scheme Optional. Sanitization scheme. Default 'json'.
+ * @param string $scheme Optional. Sanitization scheme. Default 'rest'.
  * @return string Full URL to the endpoint.
  */
-function rest_url( $path = '', $scheme = 'json' ) {
+function rest_url( $path = '', $scheme = 'rest' ) {
 	return get_rest_url( null, $path, $scheme );
 }
 
@@ -482,13 +478,18 @@ function rest_get_server() {
  * Ensures request arguments are a request object (for consistency).
  *
  * @since 4.4.0
+ * @since 5.3.0 Accept string argument for the request path.
  *
- * @param array|WP_REST_Request $request Request to check.
+ * @param array|string|WP_REST_Request $request Request to check.
  * @return WP_REST_Request REST request instance.
  */
 function rest_ensure_request( $request ) {
 	if ( $request instanceof WP_REST_Request ) {
 		return $request;
+	}
+
+	if ( is_string( $request ) ) {
+		return new WP_REST_Request( 'GET', $request );
 	}
 
 	return new WP_REST_Request( 'GET', '', $request );
@@ -503,7 +504,7 @@ function rest_ensure_request( $request ) {
  *
  * @since 4.4.0
  *
- * @param WP_Error|WP_HTTP_Response|mixed $response Response to check.
+ * @param WP_HTTP_Response|WP_Error|mixed $response Response to check.
  * @return WP_REST_Response|mixed If response generated an error, WP_Error, if response
  *                                is already an instance, WP_HTTP_Response, otherwise
  *                                returns a new WP_REST_Response instance.
@@ -587,7 +588,9 @@ function rest_send_cors_headers( $value ) {
 		header( 'Access-Control-Allow-Origin: ' . $origin );
 		header( 'Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, PATCH, DELETE' );
 		header( 'Access-Control-Allow-Credentials: true' );
-		header( 'Vary: Origin' );
+		header( 'Vary: Origin', false );
+	} elseif ( ! headers_sent() && 'GET' === $_SERVER['REQUEST_METHOD'] && ! is_user_logged_in() ) {
+		header( 'Vary: Origin', false );
 	}
 
 	return $value;
@@ -692,6 +695,24 @@ function rest_send_allow_header( $response, $server, $request ) {
 }
 
 /**
+ * Recursively computes the intersection of arrays using keys for comparison.
+ *
+ * @param  array $array1 The array with master keys to check.
+ * @param  array $array2 An array to compare keys against.
+ *
+ * @return array An associative array containing all the entries of array1 which have keys that are present in all arguments.
+ */
+function _rest_array_intersect_key_recursive( $array1, $array2 ) {
+	$array1 = array_intersect_key( $array1, $array2 );
+	foreach ( $array1 as $key => $value ) {
+		if ( is_array( $value ) && is_array( $array2[ $key ] ) ) {
+			$array1[ $key ] = _rest_array_intersect_key_recursive( $value, $array2[ $key ] );
+		}
+	}
+	return $array1;
+}
+
+/**
  * Filter the API response to include only a white-listed set of response object fields.
  *
  * @since 4.8.0
@@ -718,20 +739,71 @@ function rest_filter_response_fields( $response, $server, $request ) {
 	// Trim off outside whitespace from the comma delimited list.
 	$fields = array_map( 'trim', $fields );
 
-	$fields_as_keyed = array_combine( $fields, array_fill( 0, count( $fields ), true ) );
+	// Create nested array of accepted field hierarchy.
+	$fields_as_keyed = array();
+	foreach ( $fields as $field ) {
+		$parts = explode( '.', $field );
+		$ref   = &$fields_as_keyed;
+		while ( count( $parts ) > 1 ) {
+			$next = array_shift( $parts );
+			if ( isset( $ref[ $next ] ) && true === $ref[ $next ] ) {
+				// Skip any sub-properties if their parent prop is already marked for inclusion.
+				break 2;
+			}
+			$ref[ $next ] = isset( $ref[ $next ] ) ? $ref[ $next ] : array();
+			$ref          = &$ref[ $next ];
+		}
+		$last         = array_shift( $parts );
+		$ref[ $last ] = true;
+	}
 
 	if ( wp_is_numeric_array( $data ) ) {
 		$new_data = array();
 		foreach ( $data as $item ) {
-			$new_data[] = array_intersect_key( $item, $fields_as_keyed );
+			$new_data[] = _rest_array_intersect_key_recursive( $item, $fields_as_keyed );
 		}
 	} else {
-		$new_data = array_intersect_key( $data, $fields_as_keyed );
+		$new_data = _rest_array_intersect_key_recursive( $data, $fields_as_keyed );
 	}
 
 	$response->set_data( $new_data );
 
 	return $response;
+}
+
+/**
+ * Given an array of fields to include in a response, some of which may be
+ * `nested.fields`, determine whether the provided field should be included
+ * in the response body.
+ *
+ * If a parent field is passed in, the presence of any nested field within
+ * that parent will cause the method to return `true`. For example "title"
+ * will return true if any of `title`, `title.raw` or `title.rendered` is
+ * provided.
+ *
+ * @since 5.3.0
+ *
+ * @param string $field  A field to test for inclusion in the response body.
+ * @param array  $fields An array of string fields supported by the endpoint.
+ * @return bool Whether to include the field or not.
+ */
+function rest_is_field_included( $field, $fields ) {
+	if ( in_array( $field, $fields, true ) ) {
+		return true;
+	}
+	foreach ( $fields as $accepted_field ) {
+		// Check to see if $field is the parent of any item in $fields.
+		// A field "parent" should be accepted if "parent.child" is accepted.
+		if ( strpos( $accepted_field, "$field." ) === 0 ) {
+			return true;
+		}
+		// Conversely, if "parent" is accepted, all "parent.child" fields should
+		// also be accepted.
+		if ( strpos( $field, "$accepted_field." ) === 0 ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -800,8 +872,7 @@ function rest_output_link_header() {
  * @global mixed          $wp_rest_auth_cookie
  *
  * @param WP_Error|mixed $result Error from another authentication handler,
- *                               null if we should handle it, or another value
- *                               if not.
+ *                               null if we should handle it, or another value if not.
  * @return WP_Error|mixed|bool WP_Error if the cookie is invalid, the $result, otherwise true.
  */
 function rest_cookie_check_errors( $result ) {
@@ -953,7 +1024,7 @@ function rest_authorization_required_code() {
  * @param  mixed            $value
  * @param  WP_REST_Request  $request
  * @param  string           $param
- * @return WP_Error|boolean
+ * @return true|WP_Error
  */
 function rest_validate_request_arg( $value, $request, $param ) {
 	$attributes = $request->get_attributes();
@@ -1093,7 +1164,7 @@ function rest_is_boolean( $maybe_bool ) {
  *
  * @param mixed $id_or_email The Gravatar to retrieve a URL for. Accepts a user_id, gravatar md5 hash,
  *                           user email, WP_User object, WP_Post object, or WP_Comment object.
- * @return array $urls Gravatar url for each size.
+ * @return array Avatar URLs keyed by size. Each value can be a URL string or boolean false.
  */
 function rest_get_avatar_urls( $id_or_email ) {
 	$avatar_sizes = rest_get_avatar_sizes();
@@ -1111,7 +1182,7 @@ function rest_get_avatar_urls( $id_or_email ) {
  *
  * @since 4.7.0
  *
- * @return array List of pixel sizes for avatars. Default `[ 24, 48, 96 ]`.
+ * @return int[] List of pixel sizes for avatars. Default `[ 24, 48, 96 ]`.
  */
 function rest_get_avatar_sizes() {
 	/**
@@ -1122,7 +1193,7 @@ function rest_get_avatar_sizes() {
 	 *
 	 * @since 4.4.0
 	 *
-	 * @param array $sizes An array of int values that are the pixel sizes for avatars.
+	 * @param int[] $sizes An array of int values that are the pixel sizes for avatars.
 	 *                     Default `[ 24, 48, 96 ]`.
 	 */
 	return apply_filters( 'rest_avatar_sizes', array( 24, 48, 96 ) );
@@ -1139,6 +1210,20 @@ function rest_get_avatar_sizes() {
  * @return true|WP_Error
  */
 function rest_validate_value_from_schema( $value, $args, $param = '' ) {
+	if ( is_array( $args['type'] ) ) {
+		foreach ( $args['type'] as $type ) {
+			$type_args         = $args;
+			$type_args['type'] = $type;
+
+			if ( true === rest_validate_value_from_schema( $value, $type_args, $param ) ) {
+				return true;
+			}
+		}
+
+		/* translators: 1: Parameter, 2: List of types. */
+		return new WP_Error( 'rest_invalid_param', sprintf( __( '%1$s is not of type %2$s' ), $param, implode( ',', $args['type'] ) ) );
+	}
+
 	if ( 'array' === $args['type'] ) {
 		if ( ! is_null( $value ) ) {
 			$value = wp_parse_list( $value );
@@ -1191,6 +1276,15 @@ function rest_validate_value_from_schema( $value, $args, $param = '' ) {
 		}
 	}
 
+	if ( 'null' === $args['type'] ) {
+		if ( null !== $value ) {
+			/* translators: 1: Parameter, 2: Type name. */
+			return new WP_Error( 'rest_invalid_param', sprintf( __( '%1$s is not of type %2$s.' ), $param, 'null' ) );
+		}
+
+		return true;
+	}
+
 	if ( ! empty( $args['enum'] ) ) {
 		if ( ! in_array( $value, $args['enum'], true ) ) {
 			/* translators: 1: Parameter, 2: List of valid values. */
@@ -1210,7 +1304,7 @@ function rest_validate_value_from_schema( $value, $args, $param = '' ) {
 
 	if ( 'boolean' === $args['type'] && ! rest_is_boolean( $value ) ) {
 		/* translators: 1: Parameter, 2: Type name. */
-		return new WP_Error( 'rest_invalid_param', sprintf( __( '%1$s is not of type %2$s.' ), $value, 'boolean' ) );
+		return new WP_Error( 'rest_invalid_param', sprintf( __( '%1$s is not of type %2$s.' ), $param, 'boolean' ) );
 	}
 
 	if ( 'string' === $args['type'] && ! is_string( $value ) ) {
@@ -1234,7 +1328,7 @@ function rest_validate_value_from_schema( $value, $args, $param = '' ) {
 			case 'ip':
 				if ( ! rest_is_ip_address( $value ) ) {
 					/* translators: %s: IP address. */
-					return new WP_Error( 'rest_invalid_param', sprintf( __( '%s is not a valid IP address.' ), $value ) );
+					return new WP_Error( 'rest_invalid_param', sprintf( __( '%s is not a valid IP address.' ), $param ) );
 				}
 				break;
 		}
@@ -1295,6 +1389,27 @@ function rest_validate_value_from_schema( $value, $args, $param = '' ) {
  * @return true|WP_Error
  */
 function rest_sanitize_value_from_schema( $value, $args ) {
+	if ( is_array( $args['type'] ) ) {
+		// Determine which type the value was validated against, and use that type when performing sanitization
+		$validated_type = '';
+
+		foreach ( $args['type'] as $type ) {
+			$type_args         = $args;
+			$type_args['type'] = $type;
+
+			if ( ! is_wp_error( rest_validate_value_from_schema( $value, $type_args ) ) ) {
+				$validated_type = $type;
+				break;
+			}
+		}
+
+		if ( ! $validated_type ) {
+			return null;
+		}
+
+		$args['type'] = $validated_type;
+	}
+
 	if ( 'array' === $args['type'] ) {
 		if ( empty( $args['items'] ) ) {
 			return (array) $value;
@@ -1335,6 +1450,10 @@ function rest_sanitize_value_from_schema( $value, $args ) {
 		}
 
 		return $value;
+	}
+
+	if ( 'null' === $args['type'] ) {
+		return null;
 	}
 
 	if ( 'integer' === $args['type'] ) {

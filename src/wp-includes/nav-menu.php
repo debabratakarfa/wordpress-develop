@@ -92,6 +92,13 @@ function register_nav_menus( $locations = array() ) {
 
 	add_theme_support( 'menus' );
 
+	foreach ( $locations as $key => $value ) {
+		if ( is_int( $key ) ) {
+			_doing_it_wrong( __FUNCTION__, __( 'Nav menu locations must be strings.' ), '5.3.0' );
+			break;
+		}
+	}
+
 	$_wp_registered_nav_menus = array_merge( (array) $_wp_registered_nav_menus, $locations );
 }
 
@@ -593,7 +600,7 @@ function wp_update_nav_menu_item( $menu_id = 0, $menu_item_db_id = 0, $menu_item
  *
  * @param array $args Optional. Array of arguments passed on to get_terms().
  *                    Default empty array.
- * @return array Menu objects.
+ * @return WP_Term[] An array of menu objects.
  */
 function wp_get_nav_menus( $args = array() ) {
 	$defaults = array(
@@ -610,8 +617,8 @@ function wp_get_nav_menus( $args = array() ) {
 	 *
 	 * @see get_terms()
 	 *
-	 * @param array $menus An array of menu objects.
-	 * @param array $args  An array of arguments used to retrieve menu objects.
+	 * @param WP_Term[] $menus An array of menu objects.
+	 * @param array     $args  An array of arguments used to retrieve menu objects.
 	 */
 	return apply_filters( 'wp_get_nav_menus', get_terms( $args ), $args );
 }
@@ -977,7 +984,7 @@ function wp_setup_nav_menu_item( $menu_item ) {
  * @param int    $object_id   The ID of the original object.
  * @param string $object_type The type of object, such as "taxonomy" or "post_type."
  * @param string $taxonomy    If $object_type is "taxonomy", $taxonomy is the name of the tax that $object_id belongs to
- * @return array The array of menu item IDs; empty array if none;
+ * @return int[] The array of menu item IDs; empty array if none;
  */
 function wp_get_associated_nav_menu_items( $object_id = 0, $object_type = 'post_type', $taxonomy = '' ) {
 	$object_id     = (int) $object_id;
